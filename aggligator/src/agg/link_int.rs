@@ -789,6 +789,11 @@ where
         self.tx_polling
     }
 
+    /// Whether the link is currently able to start sending a new message.
+    pub(crate) fn can_start_send(&self) -> bool {
+        self.tx_polling.is_none() && self.tx_data.is_none()
+    }
+
     /// Reset statistics and limits when the link is unconfirmed.
     pub(crate) fn reset(&mut self) {
         // Log hang in statistics.

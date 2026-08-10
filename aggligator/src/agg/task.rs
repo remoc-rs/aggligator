@@ -144,6 +144,12 @@ pub(super) enum SentReliableStatus {
         link_id: usize,
         /// Id of link used to send the packet.
         link: LinkId,
+        /// Indices of all links over which the packet was sent.
+        ///
+        /// With failover links enabled, a packet is sent over several links at once.
+        /// Only the first link (given by `link_id`) is tracked for flushing and
+        /// acknowledgement purposes; the others are redundant copies.
+        links: Vec<usize>,
         /// Sent message.
         msg: ReliableMsg,
         /// Whether packet has been resent.
@@ -624,6 +630,12 @@ where
                 }
             }
 
+            // Whether the currently selected sendable idle link is ready to start
+            // sending immediately. Used to avoid attempting to send over a link
+            // that is already busy.
+            let sendable_ready = sendable_idle_link_id
+                .is_some_and(|id| self.links[id].as_ref().is_some_and(|l| l.can_start_send()));
+
             // Task for receiving requests from sender.
             let write_rx_task = async {
                 if links_idling && is_consume_ack_required {
@@ -634,7 +646,7 @@ where
                             match write_rx
                                 .recv_if(|msg| match msg {
                                     SendReq::Send(data) => {
-                                        data.len() <= tx_space && sendable_idle_link_id.is_some()
+                                        data.len() <= tx_space && sendable_ready
                                     }
                                     SendReq::Flush(_) => true,
                                 })
@@ -888,7 +900,24 @@ where
                                         data.len()
                                     );
                                     self.idle_links.retain(|idle_id| *idle_id != id);
-                                    self.send_reliable_over_link(id, ReliableMsg::Data(data));
+                                    let mut ids = vec![id];
+                                    for &other_id in self.idle_links.iter().rev() {
+                                        if ids.len() >= self.cfg.failover_links.get() {
+                                            break;
+                                        }
+                                        if other_id != id
+                                            && self.links[other_id]
+                                                .as_ref()
+                                                .is_some_and(|l2| l2.can_start_send() && l2.is_sendable())
+                                        {
+                                            ids.push(other_id);
+                                        }
+                                    }
+                                    if ids.len() > 1 {
+                                        self.send_data_failover(&ids, data);
+                                    } else {
+                                        self.send_reliable_over_link(id, ReliableMsg::Data(data));
+                                    }
                                 } else if link.needs_flush() && !link.is_sendable() {
                                     tracing::trace!(?link_id, tag =% link.tag(), "flushing link because it is not sendable");
                                     self.flush_link(id);
@@ -990,7 +1019,24 @@ where
                         "sending data of size {} bytes over idle link", data.len()
                     );
                     self.idle_links.retain(|&idle_id| idle_id != id);
-                    self.send_reliable_over_link(id, ReliableMsg::Data(data));
+                    let mut ids = vec![id];
+                    for &other_id in self.idle_links.iter().rev() {
+                        if ids.len() >= self.cfg.failover_links.get() {
+                            break;
+                        }
+                        if other_id != id
+                            && self.links[other_id]
+                                .as_ref()
+                                .is_some_and(|l2| l2.can_start_send() && l2.is_sendable())
+                        {
+                            ids.push(other_id);
+                        }
+                    }
+                    if ids.len() > 1 {
+                        self.send_data_failover(&ids, data);
+                    } else {
+                        self.send_reliable_over_link(id, ReliableMsg::Data(data));
+                    }
                 }
 
                 TaskEvent::SendConsumed => {
@@ -1716,6 +1762,7 @@ where
                 flushed: None,
                 link_id: id,
                 link: link.link_id(),
+                links: vec![id],
                 msg: reliable_msg,
                 resent: false,
             }),
@@ -1725,6 +1772,27 @@ where
         self.txed_packets.push_back(packet);
 
         seq
+    }
+
+    /// Sends a data message over the specified links using failover links.
+    ///
+    /// The message is sent over `ids[0]` and tracked as a normal packet. Copies
+    /// are additionally sent over the remaining links. The copies do not count
+    /// towards the per-link unacknowledged data accounting and are not tracked
+    /// for resending, so that the accounting stays simple.
+    fn send_data_failover(&mut self, ids: &[usize], data: Bytes) {
+        let seq = self.send_reliable_over_link(ids[0], ReliableMsg::Data(data.clone()));
+
+        // Send redundant copies over the other links.
+        for &id in &ids[1..] {
+            let link = self.links[id].as_mut().unwrap();
+            tracing::trace!(
+                link_id =? link.link_id(), tag =% link.tag(),
+                "sending failover copy of data message {seq} over link"
+            );
+            let (msg, data) = ReliableMsg::Data(data.clone()).to_link_msg(seq);
+            link.start_send_msg(msg, data);
+        }
     }
 
     /// Resends a packet over the specified link.
@@ -1766,6 +1834,7 @@ where
             flushed: None,
             link_id: id,
             link: link.link_id(),
+            links: vec![id],
             msg: reliable_msg.clone(),
             resent: true,
         };
@@ -1778,32 +1847,48 @@ where
         // Flush link.
         self.flush_link(id);
 
-        // Mark link as unconfirmed.
-        let link = self.links[id].as_mut().unwrap();
-        link.set_unconfirmed(Some((Instant::now(), reason)));
+        // Mark link as unconfirmed and reset limits.
+        {
+            let link = self.links[id].as_mut().unwrap();
+            link.set_unconfirmed(Some((Instant::now(), reason)));
+            link.reset();
+        }
         self.idle_links.retain(|&idle_id| idle_id != id);
         self.unflushed_links.remove(&id);
-
-        // Reset limits.
-        link.reset();
 
         // Mark packets as being resent and put them into resend queue.
         for p in &mut self.txed_packets {
             let mut status = p.status.borrow_mut();
-            match &*status {
-                SentReliableStatus::Sent { link_id, link: sent_link, msg, .. } if *link_id == id => {
-                    // Update link statistics.
-                    if let ReliableMsg::Data(data) = &msg {
+            if let SentReliableStatus::Sent { link_id, link: sent_link, msg, links, .. } = &mut *status {
+                if *link_id != id {
+                    continue;
+                }
+
+                // Update link statistics of the unconfirmed link.
+                if let ReliableMsg::Data(data) = &msg {
+                    if let Some(link) = self.links[id].as_mut() {
                         link.txed_unacked_data -= data.len();
                     }
+                }
 
+                // Remove this link from the set of links over which the packet
+                // was sent. If the packet is still in flight over another live
+                // link, it does not need to be resent.
+                links.retain(|&l_id| l_id != id);
+                if let Some(&new_id) = links.first() {
+                    // The packet is still alive on another link: promote it to be
+                    // the primary link so that confirmations are tracked.
+                    *link_id = new_id;
+                    if let Some(new_link) = self.links[new_id].as_ref() {
+                        *sent_link = new_link.link_id();
+                    }
+                } else {
                     *status = SentReliableStatus::ResendQueued { msg: msg.clone(), sent_link: *sent_link };
                     self.resend_queue.push_back(p.clone());
                 }
-                _ => (),
-            };
+            }
         }
-        link.clean_txed_packets();
+        self.links[id].as_mut().unwrap().clean_txed_packets();
 
         // Sort resend queue, so that oldest packets are resend first.
         self.resend_queue.make_contiguous().sort_by_key(|packet| packet.seq);
@@ -2141,19 +2226,20 @@ where
 
     /// Handles a received acknowledgement.
     fn handle_ack(&mut self, id: usize, rxed_seq: Seq) {
-        let link = self.links[id].as_mut().unwrap();
-        let link_id = link.link_id();
-        let tag = link.tag();
+        let link_id = self.links[id].as_ref().unwrap().link_id();
 
-        tracing::trace!(?link_id, %tag, "processing received ack for {rxed_seq} on link");
+        tracing::trace!(?link_id, "processing received ack for {rxed_seq} on link");
 
         // Possibly unblock send buffer increase.
-        if let Some(last_increased) = link.txed_unacked_data_limit_increased {
-            if last_increased <= rxed_seq {
-                tracing::trace!(?link_id, %tag, "re-allowing increase of send limit of link");
-                link.txed_unacked_data_limit_increased = None;
-            } else {
-                link.roundtrip_estimates = Some(0);
+        {
+            let link = self.links[id].as_mut().unwrap();
+            if let Some(last_increased) = link.txed_unacked_data_limit_increased {
+                if last_increased <= rxed_seq {
+                    tracing::trace!(?link_id, "re-allowing increase of send limit of link");
+                    link.txed_unacked_data_limit_increased = None;
+                } else {
+                    link.roundtrip_estimates = Some(0);
+                }
             }
         }
 
@@ -2165,14 +2251,25 @@ where
             assert_eq!(packet.seq, rxed_seq);
 
             let mut status = packet.status.borrow_mut();
-            match &*status {
-                SentReliableStatus::Sent { sent, link_id, msg, .. } if *link_id == id => {
+            match &mut *status {
+                SentReliableStatus::Sent { sent, link_id, msg, links, .. }
+                    if links.contains(&id) =>
+                {
                     let size = if let ReliableMsg::Data(data) = &msg { data.len() } else { 0 };
 
-                    link.txed_unacked_data -= size;
-                    self.txed_unacked -= size;
+                    // Decrement the accounting of the primary link if it differs
+                    // from the acknowledging link. With failover links the packet
+                    // may have been acknowledged over a redundant copy.
+                    if *link_id != id {
+                        if let Some(primary_link) = self.links[*link_id].as_mut() {
+                            primary_link.txed_unacked_data =
+                                primary_link.txed_unacked_data.saturating_sub(size);
+                        }
+                    }
+                    self.txed_unacked = self.txed_unacked.saturating_sub(size);
                     self.txed_unconsumable += size;
 
+                    let link = self.links[id].as_mut().unwrap();
                     if link.roundtrip_estimates == Some(0) {
                         link.roundtrip = sent.elapsed();
                     } else if sent.elapsed() > link.roundtrip {
@@ -2184,13 +2281,16 @@ where
                     if let Some(n) = &mut link.roundtrip_estimates {
                         *n = n.saturating_add(1);
                     }
+                    if *link_id == id {
+                        link.txed_unacked_data = link.txed_unacked_data.saturating_sub(size);
+                    }
 
                     *status = SentReliableStatus::Received { size };
                 }
                 SentReliableStatus::ResendQueued { msg, .. } => {
                     let size = if let ReliableMsg::Data(data) = &msg { data.len() } else { 0 };
 
-                    self.txed_unacked -= size;
+                    self.txed_unacked = self.txed_unacked.saturating_sub(size);
                     self.txed_unconsumable += size;
                     self.resend_queue.retain(|packet| packet.seq != rxed_seq);
 
@@ -2213,7 +2313,7 @@ where
             self.txed_packets.pop_front();
         }
 
-        link.clean_txed_packets();
+        self.links[id].as_mut().unwrap().clean_txed_packets();
     }
 
     /// Sends statistics data.

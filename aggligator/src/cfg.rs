@@ -67,6 +67,16 @@ pub struct Cfg {
     pub recv_queue: NonZeroUsize,
     /// Maximum factor by which highest ping may exceed lowest ping.
     pub link_max_ping_spread: Option<NonZeroU32>,
+    /// Number of links over which each data packet is sent redundantly.
+    ///
+    /// A data packet is sent over this many links simultaneously. The receiving
+    /// endpoint accepts the first arriving copy and discards the duplicates. This
+    /// increases delivery reliability at the expense of sending the same data
+    /// multiple times over the available bandwidth.
+    ///
+    /// A value of one (the default) disables redundant sending and directs each
+    /// packet only over a single link.
+    pub failover_links: NonZeroUsize,
     /// Timeout after which connection is closed when no working links are present.
     pub no_link_timeout: Duration,
     /// Timeout after which connection is forcefully closed when sender and receiver are closed.
@@ -95,6 +105,7 @@ impl Default for Cfg {
             recv_buffer: NonZeroU32::new(134_217_728).unwrap(),
             recv_queue: NonZeroUsize::new(16).unwrap(),
             link_max_ping_spread: Some(NonZeroU32::new(5).unwrap()),
+            failover_links: NonZeroUsize::new(1).unwrap(),
             no_link_timeout: Duration::from_secs(120),
             termination_timeout: Duration::from_secs(300),
             connect_queue: NonZeroUsize::new(32).unwrap(),

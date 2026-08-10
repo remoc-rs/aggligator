@@ -619,6 +619,40 @@ async fn ten_x_link_timeout() {
 
 #[cfg_attr(not(feature = "js"), test_log::test(tokio::test(flavor = "multi_thread")))]
 #[cfg_attr(feature = "js", wasm_bindgen_test)]
+async fn two_x_failover_links_failed_link() {
+    let link_desc = LinkDesc {
+        cfg: test_channel::Cfg {
+            speed: 1_000_000,
+            latency: Some(Duration::from_millis(10)),
+            buffer_size: 100_000,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut link_descs = Vec::new();
+    for n in 0..3 {
+        link_descs.push(LinkDesc {
+            // One of the links fails; with failover links the data is sent over
+            // two links simultaneously so the failing link does not stall delivery.
+            fail: if n == 0 { Some(500) } else { None },
+            ..link_desc.clone()
+        });
+    }
+
+    let alc_cfg = Cfg {
+        failover_links: NonZeroUsize::new(2).unwrap(),
+        link: LinkCfg { retest_interval: Duration::from_secs(2), ..Default::default() },
+        no_link_timeout: Duration::from_secs(30),
+        ..Default::default()
+    };
+
+    timeout(Duration::from_secs(30), multi_link_test(&link_descs, alc_cfg, 16384, 2_000, 500_000, false, None))
+        .await
+        .unwrap();
+}
+
+#[cfg_attr(not(feature = "js"), test_log::test(tokio::test(flavor = "multi_thread")))]
+#[cfg_attr(feature = "js", wasm_bindgen_test)]
 async fn forceful_termination() {
     let link_desc = LinkDesc {
         cfg: test_channel::Cfg {

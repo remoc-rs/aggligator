@@ -19,8 +19,37 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio_util::codec::{FramedRead, FramedWrite};
+use wokio::task::{MaybeSend, MaybeSync};
 
 pub use codec::*;
+
+/// An [`AsyncRead`] that can be used by the connection task.
+///
+/// This is automatically implemented and is [`Send`] and [`Sync`] on
+/// platforms where tasks can move between threads.
+pub trait DynRead: AsyncRead + MaybeSend + MaybeSync + 'static {}
+impl<T> DynRead for T where T: AsyncRead + MaybeSend + MaybeSync + 'static + ?Sized {}
+
+/// An [`AsyncWrite`] that can be used by the connection task.
+///
+/// This is automatically implemented and is [`Send`] and [`Sync`] on
+/// platforms where tasks can move between threads.
+pub trait DynWrite: AsyncWrite + MaybeSend + MaybeSync + 'static {}
+impl<T> DynWrite for T where T: AsyncWrite + MaybeSend + MaybeSync + 'static + ?Sized {}
+
+/// A packet [`Sink`] that can be used by the connection task.
+///
+/// This is automatically implemented and is [`Send`] and [`Sync`] on
+/// platforms where tasks can move between threads.
+pub trait DynSink: Sink<Bytes, Error = io::Error> + MaybeSend + MaybeSync + 'static {}
+impl<T> DynSink for T where T: Sink<Bytes, Error = io::Error> + MaybeSend + MaybeSync + 'static + ?Sized {}
+
+/// A packet [`Stream`] that can be used by the connection task.
+///
+/// This is automatically implemented and is [`Send`] and [`Sync`] on
+/// platforms where tasks can move between threads.
+pub trait DynStream: Stream<Item = io::Result<Bytes>> + MaybeSend + MaybeSync + 'static {}
+impl<T> DynStream for T where T: Stream<Item = io::Result<Bytes>> + MaybeSend + MaybeSync + 'static + ?Sized {}
 
 struct FilterFlush<W> {
     inner: W,
@@ -179,12 +208,12 @@ where
 /// Type-neutral transmit wrapper for using an IO-stream-based link.
 ///
 /// Useful if a connection consists of different types of links.
-pub type IoTxBox = IoTx<Pin<Box<dyn AsyncWrite + Send + Sync + 'static>>>;
+pub type IoTxBox = IoTx<Pin<Box<dyn DynWrite>>>;
 
 /// Type-neutral receive wrapper for using an IO-stream-based link.
 ///
 /// Useful if a connection consists of different types of links.
-pub type IoRxBox = IoRx<Pin<Box<dyn AsyncRead + Send + Sync + 'static>>>;
+pub type IoRxBox = IoRx<Pin<Box<dyn DynRead>>>;
 
 /// A stream, either packet-based or IO-based.
 pub enum StreamBox {
@@ -238,8 +267,8 @@ impl From<IoBox> for StreamBox {
     }
 }
 
-pub(crate) type TxBox = Pin<Box<dyn Sink<Bytes, Error = io::Error> + Send + Sync + 'static>>;
-pub(crate) type RxBox = Pin<Box<dyn Stream<Item = io::Result<Bytes>> + Send + Sync + 'static>>;
+pub(crate) type TxBox = Pin<Box<dyn DynSink>>;
+pub(crate) type RxBox = Pin<Box<dyn DynStream>>;
 
 /// A boxed packet-based stream.
 pub struct TxRxBox {
@@ -251,10 +280,7 @@ pub struct TxRxBox {
 
 impl TxRxBox {
     /// Creates a new instance.
-    pub fn new(
-        tx: impl Sink<Bytes, Error = io::Error> + Send + Sync + 'static,
-        rx: impl Stream<Item = io::Result<Bytes>> + Send + Sync + 'static,
-    ) -> Self {
+    pub fn new(tx: impl DynSink, rx: impl DynStream) -> Self {
         Self { tx: Box::pin(tx), rx: Box::pin(rx) }
     }
 
@@ -293,8 +319,8 @@ impl Stream for TxRxBox {
     }
 }
 
-pub(crate) type ReadBox = Pin<Box<dyn AsyncRead + Send + Sync + 'static>>;
-pub(crate) type WriteBox = Pin<Box<dyn AsyncWrite + Send + Sync + 'static>>;
+pub(crate) type ReadBox = Pin<Box<dyn DynRead>>;
+pub(crate) type WriteBox = Pin<Box<dyn DynWrite>>;
 
 /// A boxed IO stream.
 pub struct IoBox {
@@ -306,9 +332,7 @@ pub struct IoBox {
 
 impl IoBox {
     /// Creates a new instance.
-    pub fn new(
-        read: impl AsyncRead + Send + Sync + 'static, write: impl AsyncWrite + Send + Sync + 'static,
-    ) -> Self {
+    pub fn new(read: impl DynRead, write: impl DynWrite) -> Self {
         Self { read: Box::pin(read), write: Box::pin(write) }
     }
 

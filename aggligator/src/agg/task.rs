@@ -2,9 +2,7 @@
 
 use atomic_refcell::AtomicRefCell;
 use bytes::Bytes;
-use futures::{
-    Future, FutureExt, Sink, Stream, StreamExt, future, future::BoxFuture, stream, stream::FuturesUnordered,
-};
+use futures::{Future, Sink, Stream, StreamExt, future, stream, stream::FuturesUnordered};
 use rand::{prelude::*, rngs::SmallRng};
 use std::{
     collections::{HashSet, VecDeque},
@@ -22,7 +20,10 @@ use tokio::{
     select,
     sync::{mpsc, oneshot, watch},
 };
-use wokio::time::{Instant, interval_stream, sleep_until, timeout};
+use wokio::{
+    task::{BoxFuture, MaybeSend, MaybeSendFutureExt, MaybeSync},
+    time::{Instant, interval_stream, sleep_until, timeout},
+};
 
 use crate::{
     agg::link_int::{DisconnectInitiator, LinkInt, LinkIntEvent, LinkTest},
@@ -232,7 +233,13 @@ enum SendTerminate {
 }
 
 /// Link filter function type.
-type LinkFilterFn<TAG> = Box<dyn FnMut(Link<TAG>, Vec<Link<TAG>>) -> BoxFuture<'static, bool> + Send>;
+trait LinkFilterCb<TAG>: FnMut(Link<TAG>, Vec<Link<TAG>>) -> BoxFuture<'static, bool> + MaybeSend {}
+impl<T, TAG> LinkFilterCb<TAG> for T where
+    T: FnMut(Link<TAG>, Vec<Link<TAG>>) -> BoxFuture<'static, bool> + MaybeSend
+{
+}
+
+type LinkFilterFn<TAG> = Box<dyn LinkFilterCb<TAG>>;
 
 /// Task managing a connection of aggregated links.
 ///
@@ -349,9 +356,9 @@ impl<TX, RX, TAG> fmt::Debug for Task<TX, RX, TAG> {
 
 impl<TX, RX, TAG> Task<TX, RX, TAG>
 where
-    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + Send + 'static,
-    TX: Sink<Bytes, Error = io::Error> + Unpin + Send + 'static,
-    TAG: fmt::Display + Send + Sync + 'static,
+    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + MaybeSend + 'static,
+    TX: Sink<Bytes, Error = io::Error> + Unpin + MaybeSend + 'static,
+    TAG: fmt::Display + MaybeSend + MaybeSync + 'static,
 {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -405,7 +412,7 @@ where
             established: None,
             stats_tx,
             stats_last_sent: Instant::now(),
-            link_filter: Box::new(|_, _| async { true }.boxed()),
+            link_filter: Box::new(|_, _| async { true }.maybe_boxed()),
             init_links: links.into(),
             refused_links_tasks: FuturesUnordered::new(),
             fatal_connect_error_rx,
@@ -663,7 +670,7 @@ where
                         .iter_mut()
                         .enumerate()
                         .filter_map(|(id, link_opt)| {
-                            link_opt.as_mut().map(|link| async move { (id, link.event().await) }.boxed())
+                            link_opt.as_mut().map(|link| async move { (id, link.event().await) }.maybe_boxed())
                         })
                         .collect();
                     tasks.shuffle(&mut fast_rng);
@@ -774,7 +781,7 @@ where
                                     .await;
                                     link.notify_disconnected(DisconnectReason::LinkFilter);
                                 }
-                                .boxed(),
+                                .maybe_boxed(),
                             );
                         } else {
                             link.notify_disconnected(DisconnectReason::LinkFilter);
@@ -2259,10 +2266,10 @@ where
     /// blocked. It should thus execute quickly.
     pub fn set_link_filter<F, Fut>(&mut self, mut link_filter: F)
     where
-        F: FnMut(Link<TAG>, Vec<Link<TAG>>) -> Fut + Send + 'static,
-        Fut: Future<Output = bool> + Send + 'static,
+        F: FnMut(Link<TAG>, Vec<Link<TAG>>) -> Fut + MaybeSend + 'static,
+        Fut: Future<Output = bool> + MaybeSend + 'static,
     {
-        self.link_filter = Box::new(move |link, others| link_filter(link, others).boxed());
+        self.link_filter = Box::new(move |link, others| link_filter(link, others).maybe_boxed());
     }
 
     /// Enables dumping of analysis data over the provided channel while the aggregator task is running.
@@ -2319,16 +2326,16 @@ where
 
 impl<TX, RX, TAG> IntoFuture for Task<TX, RX, TAG>
 where
-    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + Send + Sync + 'static,
-    TX: Sink<Bytes, Error = io::Error> + Unpin + Send + Sync + 'static,
-    TAG: fmt::Display + Send + Sync + 'static,
+    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + MaybeSend + MaybeSync + 'static,
+    TX: Sink<Bytes, Error = io::Error> + Unpin + MaybeSend + MaybeSync + 'static,
+    TAG: fmt::Display + MaybeSend + MaybeSync + 'static,
 {
     type Output = Result<(), TaskError>;
 
     type IntoFuture = BoxFuture<'static, Result<(), TaskError>>;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.run().boxed()
+        self.run().maybe_boxed()
     }
 }
 

@@ -5,6 +5,17 @@ All notable changes to the Aggligator WebSocket transport for the web will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+### Changed
+- the WebSocket is used directly instead of wrapping it into a thread-bound
+  proxy, since aggligator no longer requires transports to be `Send` and `Sync`
+  on the web
+- the configuration function passed to `WebSocketConnector::set_cfg` no longer
+  needs to be `Send` and `Sync`
+
+### Removed
+- dependency on threadporter
+
 ## 0.5.0 - 2026-08-03
 ### Changed
 - the minimum acknowledgement timeout of a link is increased by 3 seconds,

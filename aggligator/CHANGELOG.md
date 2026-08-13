@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 ### Changed
+- types don't require Send + Sync on the web (`js` crate feature)
 - the `js` crate feature is now ignored on non-WebAssembly targets instead of
   selecting the web backend and failing to build
 

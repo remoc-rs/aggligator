@@ -36,7 +36,6 @@ dependencies = [
  "bytes",
  "futures",
  "js-sys",
- "threadporter",
  "tokio",
  "tracing",
  "upc",
@@ -429,16 +428,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
 
 [[package]]
-name = "threadporter"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef3052f3daede4bd57b87845e91245186dc59445cad59246c9e0b11d0244008a"
-dependencies = [
- "futures-core",
- "futures-sink",
-]
-
-[[package]]
 name = "tokio"
 version = "1.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -653,7 +642,6 @@ dependencies = [
  "pin-project-lite",
  "sync_wrapper",
  "tokio",
- "tokio-stream",
  "tracing",
  "wasm-bindgen",
  "wasm-bindgen-futures",

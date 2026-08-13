@@ -10,7 +10,7 @@
 //!
 
 use bytes::Bytes;
-use futures::{FutureExt, Sink, Stream, future, future::BoxFuture};
+use futures::{Sink, Stream, future};
 use std::{
     collections::{HashMap, hash_map::Entry},
     fmt,
@@ -22,7 +22,10 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{mpsc, oneshot},
 };
-use wokio::time::{Instant, error::Elapsed, timeout};
+use wokio::{
+    task::{BoxFuture, MaybeSend, MaybeSendFutureExt, MaybeSync},
+    time::{Instant, error::Elapsed, timeout},
+};
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use crate::{
@@ -212,9 +215,9 @@ impl<TX, RX, TAG> Incoming<TX, RX, TAG> {
 
 impl<TX, RX, TAG> Incoming<TX, RX, TAG>
 where
-    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + Send + 'static,
-    TX: Sink<Bytes, Error = io::Error> + Unpin + Send + 'static,
-    TAG: fmt::Display + Send + Sync + 'static,
+    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + MaybeSend + 'static,
+    TX: Sink<Bytes, Error = io::Error> + Unpin + MaybeSend + 'static,
+    TAG: fmt::Display + MaybeSend + MaybeSync + 'static,
 {
     /// Accepts the incoming connection.
     ///
@@ -303,9 +306,9 @@ impl<TX, RX, TAG> Clone for Server<TX, RX, TAG> {
 
 impl<TX, RX, TAG> Server<TX, RX, TAG>
 where
-    TAG: fmt::Display + Send + Sync + 'static,
-    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + Send + 'static,
-    TX: Sink<Bytes, Error = io::Error> + Unpin + Send + 'static,
+    TAG: fmt::Display + MaybeSend + MaybeSync + 'static,
+    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + MaybeSend + 'static,
+    TX: Sink<Bytes, Error = io::Error> + Unpin + MaybeSend + 'static,
 {
     /// Creates a new link aggregator server.
     pub fn new(cfg: Cfg) -> Self {
@@ -590,9 +593,9 @@ where
 
 impl<R, W, TAG> Server<IoTx<W>, IoRx<R>, TAG>
 where
-    R: AsyncRead + Send + Unpin + 'static,
-    W: AsyncWrite + Send + Unpin + 'static,
-    TAG: fmt::Display + Send + Sync + 'static,
+    R: AsyncRead + MaybeSend + Unpin + 'static,
+    W: AsyncWrite + MaybeSend + Unpin + 'static,
+    TAG: fmt::Display + MaybeSend + MaybeSync + 'static,
 {
     /// Adds an incoming, stream-based link.
     ///
@@ -651,9 +654,9 @@ impl<N, R, W> fmt::Debug for Listener<N, R, W> {
 
 impl<TX, RX, TAG> Listener<TX, RX, TAG>
 where
-    TAG: fmt::Display + Send + Sync + 'static,
-    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + Send + 'static,
-    TX: Sink<Bytes, Error = io::Error> + Unpin + Send + 'static,
+    TAG: fmt::Display + MaybeSend + MaybeSync + 'static,
+    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + MaybeSend + 'static,
+    TX: Sink<Bytes, Error = io::Error> + Unpin + MaybeSend + 'static,
 {
     /// The server id.
     pub fn id(&self) -> ServerId {
@@ -719,7 +722,7 @@ impl IntoFuture for Outgoing {
     type IntoFuture = BoxFuture<'static, Result<Channel, ConnectError>>;
 
     fn into_future(self) -> Self::IntoFuture {
-        self.connect().boxed()
+        self.connect().maybe_boxed()
     }
 }
 
@@ -733,9 +736,9 @@ impl IntoFuture for Outgoing {
 /// and then call [`Outgoing::connect`] to establish the connection.
 pub fn connect<TX, RX, TAG>(cfg: Cfg) -> (Task<TX, RX, TAG>, Outgoing, Control<TX, RX, TAG>)
 where
-    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + Send + 'static,
-    TX: Sink<Bytes, Error = io::Error> + Unpin + Send + 'static,
-    TAG: fmt::Display + Send + Sync + 'static,
+    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + MaybeSend + 'static,
+    TX: Sink<Bytes, Error = io::Error> + Unpin + MaybeSend + 'static,
+    TAG: fmt::Display + MaybeSend + MaybeSync + 'static,
 {
     let AggParts { task, channel, control, connected_rx } = AggParts::new(
         Arc::new(cfg),

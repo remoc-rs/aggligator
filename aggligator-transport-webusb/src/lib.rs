@@ -24,7 +24,6 @@ use std::{
     sync::Mutex,
     time::Duration,
 };
-use threadporter::ThreadBound;
 use tokio::sync::watch;
 
 use aggligator::{
@@ -102,7 +101,7 @@ impl LinkTag for OutgoingWebUsbLinkTag {
     }
 }
 
-type FilterFn = Box<dyn Fn(&UsbDevice, &UsbInterface) -> bool + Send + Sync>;
+type FilterFn = Box<dyn Fn(&UsbDevice, &UsbInterface) -> bool>;
 
 /// WebUSB transport for outgoing connections.
 ///
@@ -114,14 +113,14 @@ type FilterFn = Box<dyn Fn(&UsbDevice, &UsbInterface) -> bool + Send + Sync>;
 /// [`USB.requestDevice()`](https://developer.mozilla.org/en-US/docs/Web/API/USB/requestDevice)
 /// in order to prompt the user for consent.
 pub struct WebUsbConnector {
-    usb: ThreadBound<Usb>,
+    usb: Usb,
     known_devices: Mutex<KnownDevices>,
     filter: FilterFn,
 }
 
 #[derive(Default)]
 struct KnownDevices {
-    devices: BiHashMap<u32, ThreadBound<UsbDevice>>,
+    devices: BiHashMap<u32, UsbDevice>,
     next_id: u32,
 }
 
@@ -138,9 +137,9 @@ impl WebUsbConnector {
     /// USB device and interface is matched.
     ///
     /// USB devices are re-enumerated when a hotplug event occurs.
-    pub fn new(filter: impl Fn(&UsbDevice, &UsbInterface) -> bool + Send + Sync + 'static) -> Result<Self> {
+    pub fn new(filter: impl Fn(&UsbDevice, &UsbInterface) -> bool + 'static) -> Result<Self> {
         Ok(Self {
-            usb: ThreadBound::new(Usb::new()?),
+            usb: Usb::new()?,
             known_devices: Mutex::new(KnownDevices::default()),
             filter: Box::new(filter),
         })
@@ -154,7 +153,7 @@ impl WebUsbConnector {
             None => {
                 let id = known_devices.next_id;
                 known_devices.next_id += 1;
-                known_devices.devices.insert(id, ThreadBound::new(device.clone()));
+                known_devices.devices.insert(id, device.clone());
                 id
             }
         }
@@ -163,74 +162,65 @@ impl WebUsbConnector {
     /// Get device by local id.
     fn device_by_id(&self, id: u32) -> Option<UsbDevice> {
         let known_devices = self.known_devices.lock().unwrap();
-        known_devices.devices.get_by_left(&id).map(|d| ThreadBound::into_inner(d.clone()))
+        known_devices.devices.get_by_left(&id).cloned()
     }
 }
 
-#[async_trait]
+#[async_trait(?Send)]
 impl ConnectingTransport for WebUsbConnector {
     fn name(&self) -> &str {
         NAME
     }
 
     async fn link_tags(&self, tx: watch::Sender<HashSet<LinkTagBox>>) -> Result<()> {
-        ThreadBound::new(async move {
-            let mut events = self.usb.events();
+        let mut events = self.usb.events();
 
-            loop {
-                let mut tags: HashSet<LinkTagBox> = HashSet::new();
+        loop {
+            let mut tags: HashSet<LinkTagBox> = HashSet::new();
 
-                for dev in self.usb.devices().await {
-                    let id = self.device_id(&dev);
-                    let Some(cfg) = dev.configuration() else { continue };
+            for dev in self.usb.devices().await {
+                let id = self.device_id(&dev);
+                let Some(cfg) = dev.configuration() else { continue };
 
-                    for iface in cfg.interfaces {
-                        if (self.filter)(&dev, &iface) {
-                            tags.insert(Box::new(OutgoingWebUsbLinkTag {
-                                id,
-                                interface: iface.interface_number,
-                            }));
-                        }
+                for iface in cfg.interfaces {
+                    if (self.filter)(&dev, &iface) {
+                        tags.insert(Box::new(OutgoingWebUsbLinkTag { id, interface: iface.interface_number }));
                     }
-                }
-
-                tx.send_if_modified(|v| {
-                    if *v != tags {
-                        *v = tags;
-                        true
-                    } else {
-                        false
-                    }
-                });
-
-                tokio::select! {
-                    res = events.next() => {
-                        if res.is_none() {
-                            break;
-                        }
-                    }
-                    () = JsSleep::new(POLL_INTERVAL) => (),
                 }
             }
 
-            Ok(())
-        })
-        .await
+            tx.send_if_modified(|v| {
+                if *v != tags {
+                    *v = tags;
+                    true
+                } else {
+                    false
+                }
+            });
+
+            tokio::select! {
+                res = events.next() => {
+                    if res.is_none() {
+                        break;
+                    }
+                }
+                () = JsSleep::new(POLL_INTERVAL) => (),
+            }
+        }
+
+        Ok(())
     }
 
     async fn connect(&self, tag: &dyn LinkTag) -> Result<StreamBox> {
-        ThreadBound::new(async move {
-            let tag: &OutgoingWebUsbLinkTag = tag.as_any().downcast_ref().unwrap();
+        let tag: &OutgoingWebUsbLinkTag = tag.as_any().downcast_ref().unwrap();
 
-            let Some(dev) = self.device_by_id(tag.id) else {
-                return Err(Error::new(ErrorKind::NotFound, "USB device gone"));
-            };
+        let Some(dev) = self.device_by_id(tag.id) else {
+            return Err(Error::new(ErrorKind::NotFound, "USB device gone"));
+        };
 
-            let hnd = Rc::new(dev.open().await?);
-            let (tx, rx) = upc::host::connect(hnd, tag.interface, &[]).await?;
+        let hnd = Rc::new(dev.open().await?);
+        let (tx, rx) = upc::host::connect(hnd, tag.interface, &[]).await?;
 
-            Ok(TxRxBox::new(tx.into_sink(), rx.into_stream()).into())
-        })
-        .await
+        Ok(TxRxBox::new(tx.into_sink(), rx.into_stream()).into())
     }
 }

@@ -1,11 +1,7 @@
 //! Link connector.
 
 use async_trait::async_trait;
-use futures::{
-    FutureExt, StreamExt,
-    future::{self, BoxFuture},
-    stream::FuturesUnordered,
-};
+use futures::{FutureExt, StreamExt, future, stream::FuturesUnordered};
 use std::{
     collections::HashSet,
     fmt,
@@ -17,7 +13,10 @@ use std::{
 };
 use tokio::sync::{RwLock, broadcast, mpsc, oneshot, watch};
 use tracing::Instrument;
-use wokio::time::sleep;
+use wokio::{
+    task::{BoxFuture, MaybeSend, MaybeSendFutureExt, MaybeSync},
+    time::sleep,
+};
 
 use super::{BoxControl, BoxLink, BoxLinkError, BoxTask, LinkCfgFn, LinkTag, LinkTagBox};
 use crate::{
@@ -27,8 +26,9 @@ use crate::{
 };
 
 /// A transport for connecting to remote endpoints.
-#[async_trait]
-pub trait ConnectingTransport: Send + Sync + 'static {
+#[cfg_attr(not(all(target_family = "wasm", feature = "js")), async_trait)]
+#[cfg_attr(all(target_family = "wasm", feature = "js"), async_trait(?Send))]
+pub trait ConnectingTransport: MaybeSend + MaybeSync + 'static {
     /// Name of the transport.
     fn name(&self) -> &str;
 
@@ -65,8 +65,9 @@ pub trait ConnectingTransport: Send + Sync + 'static {
 type ArcConnectingTransport = Arc<dyn ConnectingTransport>;
 
 /// A wrapper for an outgoing link.
-#[async_trait]
-pub trait ConnectingWrapper: Send + Sync + fmt::Debug + 'static {
+#[cfg_attr(not(all(target_family = "wasm", feature = "js")), async_trait)]
+#[cfg_attr(all(target_family = "wasm", feature = "js"), async_trait(?Send))]
+pub trait ConnectingWrapper: MaybeSend + MaybeSync + fmt::Debug + 'static {
     /// Name of the wrapper.
     fn name(&self) -> &str;
 
@@ -132,7 +133,9 @@ impl ConnectorBuilder {
     ///
     /// This is called each time before a link is connected and may modify
     /// the link-specific configuration.
-    pub fn set_link_cfg(&mut self, link_cfg_fn: impl Fn(&dyn LinkTag, &mut LinkCfg) + Send + Sync + 'static) {
+    pub fn set_link_cfg(
+        &mut self, link_cfg_fn: impl Fn(&dyn LinkTag, &mut LinkCfg) + MaybeSend + MaybeSync + 'static,
+    ) {
         self.link_cfg_fn = Arc::new(link_cfg_fn);
     }
 
@@ -318,8 +321,8 @@ impl Connector {
             let tags_changed = future::select_all(
                 transport_tags
                     .iter_mut()
-                    .map(|tt| tt.changed().boxed())
-                    .chain(iter::once(future::pending().boxed())),
+                    .map(|tt| tt.changed().maybe_boxed())
+                    .chain(iter::once(future::pending().maybe_boxed())),
             );
 
             enum ConnectorEvent {
@@ -584,6 +587,6 @@ impl IntoFuture for ConnectingTransportHandle {
                 Err(_) => Ok(()),
             }
         }
-        .boxed()
+        .maybe_boxed()
     }
 }

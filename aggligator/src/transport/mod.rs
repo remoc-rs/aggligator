@@ -69,6 +69,7 @@ use std::{
     hash::{Hash, Hasher},
     sync::Arc,
 };
+use wokio::task::{MaybeSend, MaybeSync};
 
 use crate::{
     Control, Link, Listener, Server, Task,
@@ -127,7 +128,7 @@ where
 impl<TAG> Error for LinkError<TAG> where TAG: fmt::Display + fmt::Debug {}
 
 /// A tag for a link to a remote endpoint.
-pub trait LinkTag: Debug + Display + Send + Sync + 'static {
+pub trait LinkTag: Debug + Display + MaybeSend + MaybeSync + 'static {
     /// The name of the transport.
     fn transport_name(&self) -> &str;
 
@@ -218,4 +219,8 @@ pub type BoxLink = Link<LinkTagBox>;
 pub type BoxLinkError = LinkError<LinkTagBox>;
 
 /// Link configuration function.
-type LinkCfgFn = Arc<dyn Fn(&dyn LinkTag, &mut LinkCfg) + Send + Sync>;
+trait LinkCfgCb: Fn(&dyn LinkTag, &mut LinkCfg) + MaybeSend + MaybeSync + 'static {}
+impl<T> LinkCfgCb for T where T: Fn(&dyn LinkTag, &mut LinkCfg) + MaybeSend + MaybeSync + 'static {}
+
+/// Link configuration function.
+type LinkCfgFn = Arc<dyn LinkCfgCb>;

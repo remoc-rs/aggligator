@@ -17,7 +17,10 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{Mutex, mpsc, watch},
 };
-use wokio::time::{Instant, error::Elapsed, timeout};
+use wokio::{
+    task::{MaybeSend, MaybeSync},
+    time::{Instant, error::Elapsed, timeout},
+};
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use crate::{
@@ -310,7 +313,7 @@ impl<TX, RX, TAG> Control<TX, RX, TAG>
 where
     RX: Stream<Item = Result<Bytes, io::Error>> + Unpin,
     TX: Sink<Bytes, Error = io::Error> + Unpin,
-    TAG: fmt::Display + Send + Sync + 'static,
+    TAG: fmt::Display + MaybeSend + MaybeSync + 'static,
 {
     /// Adds a new outgoing, packet-based link to the connection.
     ///
@@ -437,7 +440,7 @@ impl<R, W, TAG> Control<IoTx<W>, IoRx<R>, TAG>
 where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
-    TAG: fmt::Display + Send + Sync + 'static,
+    TAG: fmt::Display + MaybeSend + MaybeSync + 'static,
 {
     /// Adds a new outgoing, stream-based link to the connection.
     ///

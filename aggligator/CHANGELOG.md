@@ -5,6 +5,12 @@ All notable changes to Aggligator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.12.0 - 2026-08-13
+### Changed
+- types require `Send` and `Sync` on the web again, reverting the change from
+  0.11.0; it made many API types `!Send` whenever the `js` crate feature was
+  enabled
+
 ## 0.11.0 - 2026-08-13
 ### Changed
 - types don't require Send + Sync on the web (`js` crate feature)

@@ -24,6 +24,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use threadporter::{ThreadBound, thread_bound};
 use tokio::sync::watch;
 use tokio_util::io::{SinkWriter, StreamReader};
 
@@ -94,7 +95,7 @@ impl LinkTag for OutgoingWebSocketLinkTag {
 #[derive(Clone)]
 pub struct WebSocketConnector {
     urls: Vec<String>,
-    cfg_fn: Arc<dyn Fn(&mut WebSocketBuilder) + 'static>,
+    cfg_fn: Arc<dyn Fn(&mut WebSocketBuilder) + Send + Sync + 'static>,
 }
 
 impl fmt::Debug for WebSocketConnector {
@@ -128,12 +129,12 @@ impl WebSocketConnector {
 
     /// Sets the configuration function that is applied to each
     /// [WebSocket builder](WebSocketBuilder) before it is connected.
-    pub fn set_cfg(&mut self, cfg_fn: impl Fn(&mut WebSocketBuilder) + 'static) {
+    pub fn set_cfg(&mut self, cfg_fn: impl Fn(&mut WebSocketBuilder) + Send + Sync + 'static) {
         self.cfg_fn = Arc::new(cfg_fn);
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl ConnectingTransport for WebSocketConnector {
     fn name(&self) -> &str {
         NAME
@@ -153,18 +154,25 @@ impl ConnectingTransport for WebSocketConnector {
     async fn connect(&self, tag: &dyn LinkTag) -> Result<StreamBox> {
         let tag: &OutgoingWebSocketLinkTag = tag.as_any().downcast_ref().unwrap();
 
-        // Configure WebSocket.
-        let mut builder = WebSocketBuilder::new(&tag.url);
-        (self.cfg_fn)(&mut builder);
+        // WebSocket is not Send + Sync, thus we need to wrap the following
+        // code in a ThreadBound. It ensures that execution takes place on
+        // a single thread but appears to be Send + Sync.
+        thread_bound(async {
+            // Configure WebSocket.
+            let mut builder = WebSocketBuilder::new(&tag.url);
+            (self.cfg_fn)(&mut builder);
 
-        // Establish WebSocket connection.
-        let websocket = builder.connect().await?;
+            // Establish WebSocket connection.
+            let websocket = builder.connect().await?;
 
-        // Adapt WebSocket IO.
-        let (tx, rx) = websocket.into_split();
-        let write = SinkWriter::new(tx);
-        let read = StreamReader::new(rx.map(|res| res.map(|msg| Bytes::from(msg.to_vec()))));
+            // Adapt WebSocket IO.
+            let (tx, rx) = websocket.into_split();
+            let write = SinkWriter::new(ThreadBound::new(tx));
+            let read =
+                StreamReader::new(ThreadBound::new(rx.map(|res| res.map(|msg| Bytes::from(msg.to_vec())))));
 
-        Ok(IoBox::new(read, write).into())
+            Ok(IoBox::new(read, write).into())
+        })
+        .await
     }
 }

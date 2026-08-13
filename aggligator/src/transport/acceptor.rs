@@ -1,7 +1,7 @@
 //! Link acceptor.
 
 use async_trait::async_trait;
-use futures::{FutureExt, StreamExt, future, pin_mut, stream::FuturesUnordered};
+use futures::{FutureExt, StreamExt, future, future::BoxFuture, pin_mut, stream::FuturesUnordered};
 use std::{
     fmt,
     future::IntoFuture,
@@ -11,10 +11,7 @@ use std::{
 };
 use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore, broadcast, mpsc, oneshot, watch};
 use tracing::Instrument;
-use wokio::{
-    task::{BoxFuture, MaybeSend, MaybeSendFutureExt, MaybeSync},
-    time::{Instant, sleep_until},
-};
+use wokio::time::{Instant, sleep_until};
 
 use super::{
     BoxControl, BoxLink, BoxLinkError, BoxListener, BoxServer, BoxTask, LinkCfgFn, LinkError, LinkTag, LinkTagBox,
@@ -41,9 +38,8 @@ impl AcceptedStreamBox {
 }
 
 /// A transport for accepting connections from remote endpoints.
-#[cfg_attr(not(all(target_family = "wasm", feature = "js")), async_trait)]
-#[cfg_attr(all(target_family = "wasm", feature = "js"), async_trait(?Send))]
-pub trait AcceptingTransport: MaybeSend + MaybeSync + 'static {
+#[async_trait]
+pub trait AcceptingTransport: Send + Sync + 'static {
     /// Name of the transport.
     fn name(&self) -> &str;
 
@@ -62,15 +58,11 @@ pub trait AcceptingTransport: MaybeSend + MaybeSync + 'static {
 type ArcAcceptingTransport = Arc<dyn AcceptingTransport>;
 
 /// Function configuring the connection task of each incoming connection.
-trait TaskCfgCb: Fn(&mut BoxTask) + MaybeSend + MaybeSync + 'static {}
-impl<T> TaskCfgCb for T where T: Fn(&mut BoxTask) + MaybeSend + MaybeSync + 'static {}
-
-type TaskCfgFn = Box<dyn TaskCfgCb>;
+type TaskCfgFn = Box<dyn Fn(&mut BoxTask) + Send + Sync + 'static>;
 
 /// A wrapper for an incoming link.
-#[cfg_attr(not(all(target_family = "wasm", feature = "js")), async_trait)]
-#[cfg_attr(all(target_family = "wasm", feature = "js"), async_trait(?Send))]
-pub trait AcceptingWrapper: MaybeSend + MaybeSync + fmt::Debug + 'static {
+#[async_trait]
+pub trait AcceptingWrapper: Send + Sync + fmt::Debug + 'static {
     /// Name of the wrapper.
     fn name(&self) -> &str;
 
@@ -121,7 +113,7 @@ impl AcceptorBuilder {
     }
 
     /// Sets the function configuring the connection task of each incoming connection.
-    pub fn set_task_cfg(&mut self, task_cfg: impl Fn(&mut BoxTask) + MaybeSend + MaybeSync + 'static) {
+    pub fn set_task_cfg(&mut self, task_cfg: impl Fn(&mut BoxTask) + Send + Sync + 'static) {
         self.task_cfg = Box::new(task_cfg);
     }
 
@@ -134,9 +126,7 @@ impl AcceptorBuilder {
     ///
     /// This is called each time before a link is accepted and may modify
     /// the link-specific configuration.
-    pub fn set_link_cfg(
-        &mut self, link_cfg_fn: impl Fn(&dyn LinkTag, &mut LinkCfg) + MaybeSend + MaybeSync + 'static,
-    ) {
+    pub fn set_link_cfg(&mut self, link_cfg_fn: impl Fn(&dyn LinkTag, &mut LinkCfg) + Send + Sync + 'static) {
         self.link_cfg_fn = Arc::new(link_cfg_fn);
     }
 
@@ -521,6 +511,6 @@ impl IntoFuture for AcceptingTransportHandle {
                 Err(_) => Ok(()),
             }
         }
-        .maybe_boxed()
+        .boxed()
     }
 }

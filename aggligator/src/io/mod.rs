@@ -19,37 +19,32 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio_util::codec::{FramedRead, FramedWrite};
-use wokio::task::{MaybeSend, MaybeSync};
 
 pub use codec::*;
 
 /// An [`AsyncRead`] that can be used by the connection task.
 ///
-/// This is automatically implemented and is [`Send`] and [`Sync`] on
-/// platforms where tasks can move between threads.
-pub trait DynRead: AsyncRead + MaybeSend + MaybeSync + 'static {}
-impl<T> DynRead for T where T: AsyncRead + MaybeSend + MaybeSync + 'static + ?Sized {}
+/// This is automatically implemented for every type fulfilling the bounds.
+pub trait DynRead: AsyncRead + Send + Sync + 'static {}
+impl<T> DynRead for T where T: AsyncRead + Send + Sync + 'static + ?Sized {}
 
 /// An [`AsyncWrite`] that can be used by the connection task.
 ///
-/// This is automatically implemented and is [`Send`] and [`Sync`] on
-/// platforms where tasks can move between threads.
-pub trait DynWrite: AsyncWrite + MaybeSend + MaybeSync + 'static {}
-impl<T> DynWrite for T where T: AsyncWrite + MaybeSend + MaybeSync + 'static + ?Sized {}
+/// This is automatically implemented for every type fulfilling the bounds.
+pub trait DynWrite: AsyncWrite + Send + Sync + 'static {}
+impl<T> DynWrite for T where T: AsyncWrite + Send + Sync + 'static + ?Sized {}
 
 /// A packet [`Sink`] that can be used by the connection task.
 ///
-/// This is automatically implemented and is [`Send`] and [`Sync`] on
-/// platforms where tasks can move between threads.
-pub trait DynSink: Sink<Bytes, Error = io::Error> + MaybeSend + MaybeSync + 'static {}
-impl<T> DynSink for T where T: Sink<Bytes, Error = io::Error> + MaybeSend + MaybeSync + 'static + ?Sized {}
+/// This is automatically implemented for every type fulfilling the bounds.
+pub trait DynSink: Sink<Bytes, Error = io::Error> + Send + Sync + 'static {}
+impl<T> DynSink for T where T: Sink<Bytes, Error = io::Error> + Send + Sync + 'static + ?Sized {}
 
 /// A packet [`Stream`] that can be used by the connection task.
 ///
-/// This is automatically implemented and is [`Send`] and [`Sync`] on
-/// platforms where tasks can move between threads.
-pub trait DynStream: Stream<Item = io::Result<Bytes>> + MaybeSend + MaybeSync + 'static {}
-impl<T> DynStream for T where T: Stream<Item = io::Result<Bytes>> + MaybeSend + MaybeSync + 'static + ?Sized {}
+/// This is automatically implemented for every type fulfilling the bounds.
+pub trait DynStream: Stream<Item = io::Result<Bytes>> + Send + Sync + 'static {}
+impl<T> DynStream for T where T: Stream<Item = io::Result<Bytes>> + Send + Sync + 'static + ?Sized {}
 
 struct FilterFlush<W> {
     inner: W,

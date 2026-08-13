@@ -7,7 +7,6 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
 };
 use tokio::sync::{Mutex, mpsc, oneshot, watch};
-use wokio::task::{MaybeSend, MaybeSync};
 
 use crate::{
     TaskError,
@@ -34,9 +33,9 @@ pub(crate) struct AggParts<TX, RX, TAG> {
 
 impl<TX, RX, TAG> AggParts<TX, RX, TAG>
 where
-    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + MaybeSend + 'static,
-    TX: Sink<Bytes, Error = io::Error> + Unpin + MaybeSend + 'static,
-    TAG: fmt::Display + MaybeSend + MaybeSync + 'static,
+    RX: Stream<Item = Result<Bytes, io::Error>> + Unpin + Send + 'static,
+    TX: Sink<Bytes, Error = io::Error> + Unpin + Send + 'static,
+    TAG: fmt::Display + Send + Sync + 'static,
 {
     /// Creates a new aggregated connection and returns its parts.
     #[allow(clippy::type_complexity)]

@@ -34,6 +34,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "futures",
+ "threadporter",
  "tokio",
  "tokio-util",
  "tracing",
@@ -416,6 +417,16 @@ name = "sync_wrapper"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
+
+[[package]]
+name = "threadporter"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fa8ab13fafd76fabb305ac32189225ad5714ff77e433a80ff91996ff33cb11c"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+]
 
 [[package]]
 name = "tokio"

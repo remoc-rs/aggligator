@@ -88,7 +88,7 @@ where
 
     loop {
         let (ch, _control) = acceptor.accept().await?;
-        wokio::spawn(work_fn(ch.into_stream()));
+        tokio::spawn(work_fn(ch.into_stream()));
     }
 }
 
@@ -225,7 +225,7 @@ mod tls {
 
         loop {
             let (ch, _control) = acceptor.accept().await?;
-            wokio::spawn(work_fn(ch.into_stream()));
+            tokio::spawn(work_fn(ch.into_stream()));
         }
     }
 }

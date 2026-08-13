@@ -18,7 +18,6 @@ async-trait = { workspace = true }
 futures = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
-wokio = { workspace = true }
 
 bluer = { version = "0.17", default-features = false, features = [
     "rfcomm",

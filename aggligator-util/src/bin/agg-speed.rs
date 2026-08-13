@@ -319,7 +319,7 @@ impl ClientCli {
         if let Some(dump) = dump.clone() {
             let (tx, rx) = mpsc::channel(DUMP_BUFFER);
             builder.task().dump(tx);
-            wokio::spawn(dump_to_json_line_file(dump, rx));
+            tokio::spawn(dump_to_json_line_file(dump, rx));
         }
         if self.tls {
             builder.wrap(TlsClient::new(
@@ -419,7 +419,7 @@ impl ClientCli {
         let outgoing = connector.channel().unwrap();
         let control = connector.control();
 
-        wokio::spawn({
+        tokio::spawn({
             let control = control.clone();
             async move {
                 wait_sigterm().await;
@@ -430,7 +430,7 @@ impl ClientCli {
         let tags_rx = connector.available_tags_watch();
         let tag_err_rx = connector.link_errors();
         let (disabled_tags_tx, mut disabled_tags_rx) = watch::channel(HashSet::new());
-        wokio::spawn(async move {
+        tokio::spawn(async move {
             loop {
                 let disabled_tags: HashSet<LinkTagBox> = (*disabled_tags_rx.borrow_and_update()).clone();
                 connector.set_disabled_tags(disabled_tags);
@@ -449,7 +449,7 @@ impl ClientCli {
         drop(control_tx);
 
         if !self.no_monitor {
-            wokio::spawn(async move {
+            tokio::spawn(async move {
                 loop {
                     let (send, recv) = *speed_rx.borrow_and_update();
                     let speed = format!(
@@ -497,7 +497,7 @@ impl ClientCli {
             let res = speed_test.await;
             res?
         } else {
-            let task = wokio::spawn(speed_test);
+            let task = tokio::spawn(speed_test);
             block_in_place(|| {
                 interactive_monitor(
                     header_rx,
@@ -588,7 +588,7 @@ impl ServerCli {
             builder.set_task_cfg(move |task| {
                 let (tx, rx) = mpsc::channel(DUMP_BUFFER);
                 task.dump(tx);
-                wokio::spawn(dump_to_json_line_file(dump.clone(), rx));
+                tokio::spawn(dump_to_json_line_file(dump.clone(), rx));
             });
         }
         if self.tls {
@@ -683,7 +683,7 @@ impl ServerCli {
         acceptor.add(wsa);
         ports.push(format!("WebSocket {}", self.websocket));
         let websocket_addr = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), self.websocket);
-        wokio::spawn(async move {
+        tokio::spawn(async move {
             if let Err(err) = axum_server::bind(websocket_addr)
                 .serve(router.into_make_service_with_connect_info::<SocketAddr>())
                 .await
@@ -710,7 +710,7 @@ impl ServerCli {
                     res = acceptor.accept() => res?,
                     () = wait_sigterm() => break,
                 };
-                wokio::spawn({
+                tokio::spawn({
                     let control = control.clone();
                     let mut term_rx = term_tx.subscribe();
                     async move {
@@ -720,7 +720,7 @@ impl ServerCli {
                 });
                 let _ = control_tx.send((control, String::new()));
 
-                wokio::spawn(async move {
+                tokio::spawn(async move {
                     let id = ch.id();
                     let (r, w) = ch.into_stream().into_split();
                     let (speed_tx, _speed_rx) = watch::channel(Default::default());
@@ -740,7 +740,7 @@ impl ServerCli {
         if self.no_monitor {
             task.await?;
         } else {
-            let task = wokio::spawn(task);
+            let task = tokio::spawn(task);
 
             let header_rx = watch::channel(format!("{}\r\n{}", title.bold(), debug_warning())).1;
             block_in_place(|| interactive_monitor(header_rx, control_rx, 1, None, Some(tag_error_rx), None))?;

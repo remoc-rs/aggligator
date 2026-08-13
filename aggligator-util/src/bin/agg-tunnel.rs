@@ -346,7 +346,7 @@ impl ClientCli {
                     if let Some(dump) = dump.clone() {
                         let (tx, rx) = mpsc::channel(DUMP_BUFFER);
                         builder.task().dump(tx);
-                        wokio::spawn(dump_to_json_line_file(dump, rx));
+                        tokio::spawn(dump_to_json_line_file(dump, rx));
                     }
 
                     let mut connector = builder.build();
@@ -367,7 +367,7 @@ impl ClientCli {
                     let control = connector.control();
                     let outgoing = connector.channel().unwrap();
 
-                    wokio::spawn({
+                    tokio::spawn({
                         let control = control.clone();
                         async move {
                             wait_sigterm().await;
@@ -377,13 +377,13 @@ impl ClientCli {
 
                     let mut conn_tag_err_rx = connector.link_errors();
                     let tag_err_tx = tag_err_tx.clone();
-                    wokio::spawn(async move {
+                    tokio::spawn(async move {
                         while let Ok(err) = conn_tag_err_rx.recv().await {
                             let _ = tag_err_tx.send(err);
                         }
                     });
                     let mut disabled_tags_rx = disabled_tags_rx.clone();
-                    wokio::spawn(async move {
+                    tokio::spawn(async move {
                         loop {
                             let disabled_tags: HashSet<LinkTagBox> =
                                 (*disabled_tags_rx.borrow_and_update()).clone();
@@ -396,7 +396,7 @@ impl ClientCli {
 
                     let _ = control_tx.send((control.clone(), format!("{src}: {server_port}->{client_port}")));
 
-                    wokio::spawn(async move {
+                    tokio::spawn(async move {
                         if no_monitor {
                             eprintln!("Incoming connection from {src} requests port {client_port}");
                         }
@@ -406,7 +406,7 @@ impl ClientCli {
                         server_write.write_u16(server_port).await?;
 
                         let (client_read, client_write) = socket.into_split();
-                        wokio::spawn(forward(client_read, server_write));
+                        tokio::spawn(forward(client_read, server_write));
                         forward(server_read, client_write).await?;
 
                         if no_monitor {
@@ -431,7 +431,7 @@ impl ClientCli {
             eprintln!("{title}");
             task.await?;
         } else {
-            let task = wokio::spawn(task);
+            let task = tokio::spawn(task);
 
             let header_rx = watch::channel(format!("{title}\r\n").bold().to_string()).1;
             block_in_place(|| {
@@ -507,7 +507,7 @@ impl ServerCli {
             builder.set_task_cfg(move |task| {
                 let (tx, rx) = mpsc::channel(DUMP_BUFFER);
                 task.dump(tx);
-                wokio::spawn(dump_to_json_line_file(dump.clone(), rx));
+                tokio::spawn(dump_to_json_line_file(dump.clone(), rx));
             });
         }
 
@@ -599,7 +599,7 @@ impl ServerCli {
                     () = wait_sigterm() => break,
                 };
 
-                wokio::spawn({
+                tokio::spawn({
                     let control = control.clone();
                     let mut term_rx = term_tx.subscribe();
                     async move {
@@ -612,7 +612,7 @@ impl ServerCli {
 
                 let control_tx = control_tx.clone();
                 let (target_tx, target_rx) = oneshot::channel();
-                wokio::spawn(async move {
+                tokio::spawn(async move {
                     let name = if let Ok((port, target)) = target_rx.await {
                         format!("{port} -> {target}")
                     } else {
@@ -622,7 +622,7 @@ impl ServerCli {
                 });
 
                 let ports = ports.clone();
-                wokio::spawn(async move {
+                tokio::spawn(async move {
                     let (client_read, client_write) = ch.into_stream().into_split();
                     if let Err(err) =
                         Self::handle_client(ports, client_write, client_read, !no_monitor, target_tx).await
@@ -641,7 +641,7 @@ impl ServerCli {
             eprintln!("{title}");
             task.await?
         } else {
-            let task = wokio::spawn(task);
+            let task = tokio::spawn(task);
 
             let header_rx = watch::channel(format!("{title}\r\n").bold().to_string()).1;
             interactive_monitor(header_rx, control_rx, 1, None, None, None)?;
@@ -674,7 +674,7 @@ impl ServerCli {
                 eprintln!("Connection to {target} established, starting forwarding");
             }
 
-            wokio::spawn(forward(client_read, target_write));
+            tokio::spawn(forward(client_read, target_write));
             forward(target_read, client_write).await?;
 
             if !quiet {

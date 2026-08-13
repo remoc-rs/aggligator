@@ -54,7 +54,6 @@ dependencies = [
  "futures",
  "tokio",
  "tracing",
- "wokio",
 ]
 
 [[package]]
@@ -80,7 +79,6 @@ dependencies = [
  "socket2",
  "tokio",
  "tracing",
- "wokio",
 ]
 
 [[package]]
@@ -147,7 +145,6 @@ dependencies = [
  "tracing",
  "tracing-log",
  "tracing-subscriber",
- "wokio",
 ]
 
 [[package]]

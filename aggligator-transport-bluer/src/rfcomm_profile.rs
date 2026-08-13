@@ -16,8 +16,10 @@ use std::{
     io::{Error, ErrorKind, Result},
     time::Duration,
 };
-use tokio::sync::{Mutex, mpsc, watch};
-use wokio::time::timeout;
+use tokio::{
+    sync::{Mutex, mpsc, watch},
+    time::timeout,
+};
 
 #[doc(no_inline)]
 pub use bluer::{Address, Uuid, rfcomm::SocketAddr};

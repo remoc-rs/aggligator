@@ -11,6 +11,7 @@ use std::{
 };
 use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore, broadcast, mpsc, oneshot, watch};
 use tracing::Instrument;
+use wokio::time::{Instant, sleep_until};
 
 use super::{
     BoxControl, BoxLink, BoxLinkError, BoxListener, BoxServer, BoxTask, LinkCfgFn, LinkError, LinkTag, LinkTagBox,
@@ -18,8 +19,6 @@ use super::{
 use crate::{
     Cfg, LinkCfg, Server,
     alc::Channel,
-    exec,
-    exec::time::{Instant, sleep_until},
     io::{StreamBox, TxRxBox},
 };
 
@@ -146,7 +145,7 @@ impl AcceptorBuilder {
         let (error_tx, error_rx) = broadcast::channel(1024);
         let listener = Mutex::new(server.listen().unwrap());
 
-        exec::spawn(
+        wokio::spawn(
             Acceptor::task(
                 server.clone(),
                 active_transports.clone(),
@@ -303,7 +302,7 @@ impl Acceptor {
         });
 
         // Run server task.
-        exec::spawn(task.run().in_current_span());
+        wokio::spawn(task.run().in_current_span());
 
         tracing::debug!(conn_id =? control.id(), "accepted incoming connection");
         Ok((channel, control))

@@ -17,13 +17,13 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{Mutex, mpsc, watch},
 };
+use wokio::time::{Instant, error::Elapsed, timeout};
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use crate::{
     TaskError,
     agg::{link_int::LinkInt, task::FatalConnectError},
     cfg::{Cfg, LinkCfg},
-    exec::time::{Instant, error::Elapsed, timeout},
     id::{ConnId, EncryptedConnId, LinkId, ServerId},
     io::{IoRx, IoTx},
     msg::{LinkMsg, RefusedReason},

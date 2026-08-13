@@ -1,5 +1,4 @@
-#![cfg_attr(not(feature = "js"), forbid(unsafe_code))]
-#![cfg_attr(feature = "js", deny(unsafe_code))]
+#![forbid(unsafe_code)]
 #![warn(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc(
@@ -89,9 +88,6 @@
 #[cfg(target_pointer_width = "16")]
 compile_error!("target pointer width must be at least 32 bits");
 
-#[doc(hidden)]
-pub mod exec;
-
 mod agg;
 pub mod alc;
 pub mod cfg;
@@ -105,7 +101,6 @@ mod seq;
 pub mod transport;
 
 #[cfg(feature = "dump")]
-#[cfg_attr(docsrs, doc(cfg(feature = "dump")))]
 pub use agg::dump;
 
 pub use agg::task::{Task, TaskError};

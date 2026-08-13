@@ -16,11 +16,7 @@ use std::{
 use tokio::sync::{Semaphore, mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::{PollSemaphore, PollSender};
-
-use aggligator::{
-    exec,
-    exec::time::{Instant, sleep, sleep_until},
-};
+use wokio::time::{Instant, sleep, sleep_until};
 
 /// Test channel configuration.
 #[derive(Clone, Debug)]
@@ -92,7 +88,7 @@ pub fn channel(mut cfg: Cfg) -> (Sender, Receiver, Control) {
     let (control_tx, control_rx) = mpsc::channel(1);
     let control = Control { tx: control_tx };
 
-    exec::spawn(async move {
+    wokio::spawn(async move {
         let mut control_rx_opt = Some(control_rx);
         let mut sleep_need = Duration::ZERO;
         loop {

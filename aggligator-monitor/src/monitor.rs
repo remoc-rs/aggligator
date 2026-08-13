@@ -21,7 +21,6 @@ use tokio::sync::{broadcast, broadcast::error::TryRecvError, watch};
 
 use aggligator::{
     control::Control,
-    exec,
     id::ConnId,
     transport::{ConnectingTransport, LinkError, LinkTagBox},
 };
@@ -43,7 +42,7 @@ pub fn watch_tags(
         transport_tasks.push(async move { transport.link_tags(tx).await });
     }
 
-    exec::spawn(async move {
+    wokio::spawn(async move {
         loop {
             // Remove channels from terminated transports.
             transport_tags.retain(|tt| tt.has_changed().is_ok());

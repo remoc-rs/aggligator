@@ -6,6 +6,7 @@ use std::{
     num::{NonZeroU32, NonZeroUsize},
     time::Duration,
 };
+use wokio::time::{sleep, timeout};
 
 #[cfg(feature = "js")]
 use wasm_bindgen_test::wasm_bindgen_test;
@@ -17,10 +18,6 @@ use aggligator::{
     cfg::{Cfg, LinkCfg, LinkPing},
     connect::{Server, connect},
     control::DisconnectReason,
-    exec::{
-        self,
-        time::{sleep, timeout},
-    },
 };
 
 mod test_channel;
@@ -79,7 +76,7 @@ async fn multi_link_test(
 
         println!("server: accepting incoming connection");
         let (task, ch, mut control) = incoming.accept();
-        let task = exec::spawn(task.into_future());
+        let task = wokio::spawn(task.into_future());
         assert!(!control.is_terminated());
 
         println!("server: waiting for links");
@@ -129,7 +126,7 @@ async fn multi_link_test(
                     {
                         println!("pausing link a {n}");
                         let ctrl = a_controls[n].clone();
-                        exec::spawn(async move {
+                        wokio::spawn(async move {
                             let _ = ctrl.pause_for(dur).await;
                             println!("unpausing link a {n}");
                         });
@@ -139,7 +136,7 @@ async fn multi_link_test(
                     {
                         println!("failing link a {n}");
                         let ctrl = a_controls[n].clone();
-                        exec::spawn(async move { ctrl.disconnect().await });
+                        wokio::spawn(async move { ctrl.disconnect().await });
                     }
                     if let Some((when, dur)) = desc.block
                         && i == when
@@ -148,7 +145,7 @@ async fn multi_link_test(
                         let link = added_links[n].clone();
                         link.set_blocked(true);
                         assert!(link.is_blocked());
-                        exec::spawn(async move {
+                        wokio::spawn(async move {
                             sleep(dur).await;
                             println!("unblocking link a {n}");
                             link.set_blocked(false);
@@ -231,7 +228,7 @@ async fn multi_link_test(
     let client_task = async move {
         println!("client: starting outgoing link");
         let (task, outgoing, mut control) = connect(cfg);
-        let task = exec::spawn(task.into_future());
+        let task = wokio::spawn(task.into_future());
 
         let mut added_links_tasks = Vec::new();
         for (n, (rx, tx)) in client_links.into_iter().enumerate() {
@@ -291,7 +288,7 @@ async fn multi_link_test(
                     {
                         println!("pausing link b {n}");
                         let ctrl = b_controls[n].clone();
-                        exec::spawn(async move {
+                        wokio::spawn(async move {
                             let _ = ctrl.pause_for(dur).await;
                             println!("unpausing link b {n}");
                         });
@@ -301,7 +298,7 @@ async fn multi_link_test(
                     {
                         println!("failing link b {n}");
                         let ctrl = b_controls[n].clone();
-                        exec::spawn(async move { ctrl.disconnect().await });
+                        wokio::spawn(async move { ctrl.disconnect().await });
                     }
                 }
 

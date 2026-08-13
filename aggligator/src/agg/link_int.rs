@@ -18,12 +18,12 @@ use tokio::{
     select,
     sync::{mpsc, watch},
 };
+use wokio::time::{Instant, sleep_until};
 
 use crate::{
     agg::task::{SentReliable, SentReliableStatus},
     cfg::{Cfg, ExchangedCfg, LinkCfg},
     control::{Direction, DisconnectReason, Link, LinkIntervalStats, LinkStats, NotWorkingReason},
-    exec::time::{Instant, sleep_until},
     id::{ConnId, LinkId},
     msg::LinkMsg,
     seq::Seq,

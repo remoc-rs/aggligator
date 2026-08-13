@@ -28,11 +28,8 @@ use tokio::{
     sync::{mpsc, mpsc::error::TryRecvError, watch},
     task::block_in_place,
 };
+use wokio::time::{sleep, timeout};
 
-use aggligator::{
-    exec,
-    exec::time::{sleep, timeout},
-};
 use aggligator_monitor::{monitor::format_speed, speed, speed::INTERVAL};
 use aggligator_util::init_log;
 
@@ -195,7 +192,7 @@ impl RawClientCli {
                     let iface_speeds_tx = speeds_tx.clone();
                     let interfaces = interfaces.clone();
                     let target = *target;
-                    exec::spawn(async move {
+                    wokio::spawn(async move {
                         if iface_speeds_tx.is_none() {
                             eprintln!("Trying TCP connection from {iface}");
                         }
@@ -218,7 +215,7 @@ impl RawClientCli {
                                     Some(iface_speeds_tx) => {
                                         let iface = iface.clone();
                                         let (tx, mut rx) = watch::channel(Default::default());
-                                        exec::spawn(async move {
+                                        wokio::spawn(async move {
                                             while let Ok(()) = rx.changed().await {
                                                 let speed = *rx.borrow_and_update();
                                                 if iface_speeds_tx
@@ -370,7 +367,7 @@ impl RawClientCli {
             .await?;
         } else {
             let (speeds_tx, speeds_rx) = mpsc::channel(16);
-            exec::spawn(Self::test_links(target, self.send_only, self.recv_only, limit, time, Some(speeds_tx)));
+            wokio::spawn(Self::test_links(target, self.send_only, self.recv_only, limit, time, Some(speeds_tx)));
             block_in_place(|| Self::monitor(&header, speeds_rx))?;
         }
 
@@ -427,7 +424,7 @@ impl RawServerCli {
             eprintln!("Accepted TCP connection from {src}");
 
             let (read, write) = socket.into_split();
-            exec::spawn(async move {
+            wokio::spawn(async move {
                 let _ = speed::speed_test(
                     &src.to_string(),
                     read,

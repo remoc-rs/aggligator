@@ -19,6 +19,7 @@ futures = { workspace = true }
 rand = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "sync"] }
 tracing = { workspace = true }
+wokio = { workspace = true }
 
 [package.metadata.docs.rs]
 all-features = true

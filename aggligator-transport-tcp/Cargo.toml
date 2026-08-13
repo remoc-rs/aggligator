@@ -23,6 +23,7 @@ async-trait = { workspace = true }
 futures = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = ["net"] }
+wokio = { workspace = true }
 
 network-interface = "2"
 socket2 = "0.6.0"

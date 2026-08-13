@@ -17,12 +17,12 @@ use std::{
 };
 use tokio::sync::{RwLock, broadcast, mpsc, oneshot, watch};
 use tracing::Instrument;
+use wokio::time::sleep;
 
 use super::{BoxControl, BoxLink, BoxLinkError, BoxTask, LinkCfgFn, LinkTag, LinkTagBox};
 use crate::{
     Cfg, Link, LinkCfg, Outgoing, connect,
     control::DisconnectReason,
-    exec::{self, time::sleep},
     io::{StreamBox, TxRxBox},
 };
 
@@ -163,7 +163,7 @@ impl ConnectorBuilder {
         });
 
         // Run link aggregator task for connection.
-        exec::spawn(task.run().in_current_span());
+        wokio::spawn(task.run().in_current_span());
 
         // Set up channels.
         let (transport_tx, transport_rx) = mpsc::unbounded_channel();
@@ -172,7 +172,7 @@ impl ConnectorBuilder {
         let (disabled_tags_tx, disabled_tags_rx) = watch::channel(HashSet::new());
 
         // Start connector task managing all transports.
-        exec::spawn(
+        wokio::spawn(
             Connector::task(
                 control.clone(),
                 active_transports,

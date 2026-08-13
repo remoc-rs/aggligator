@@ -6,6 +6,7 @@ use std::{
     num::{NonZeroU32, NonZeroUsize},
     time::Duration,
 };
+use wokio::time::timeout;
 
 #[cfg(feature = "js")]
 use wasm_bindgen_test::wasm_bindgen_test;
@@ -15,8 +16,6 @@ use aggligator::{
     alc::{RecvError, SendError},
     cfg::{Cfg, LinkCfg},
     connect::{Server, connect},
-    exec,
-    exec::time::timeout,
 };
 
 mod test_channel;
@@ -49,7 +48,7 @@ async fn single_link_test(
 
         println!("server: accepting incoming connection");
         let (task, ch, control) = incoming.accept();
-        let task = exec::spawn(task.into_future());
+        let task = wokio::spawn(task.into_future());
         assert!(!control.is_terminated());
 
         let links = control.links();
@@ -76,14 +75,14 @@ async fn single_link_test(
                 {
                     println!("pausing link a");
                     let ctrl = link_a_control.clone();
-                    exec::spawn(async move { ctrl.pause_for(dur).await });
+                    wokio::spawn(async move { ctrl.pause_for(dur).await });
                 }
                 if let Some(when) = fail_link
                     && i == when
                 {
                     println!("failing link a");
                     let ctrl = link_a_control.clone();
-                    exec::spawn(async move { ctrl.disconnect().await });
+                    wokio::spawn(async move { ctrl.disconnect().await });
                 }
             },
             expected_send_err,
@@ -138,7 +137,7 @@ async fn single_link_test(
     let client_task = async move {
         println!("client: starting outgoing link");
         let (task, outgoing, mut control) = connect(cfg);
-        let task = exec::spawn(task.into_future());
+        let task = wokio::spawn(task.into_future());
 
         println!("client: adding outgoing link");
         control.add(link_a_tx, link_b_rx, "outgoing", &[], None).await.unwrap();
@@ -181,14 +180,14 @@ async fn single_link_test(
                 {
                     println!("pausing link b");
                     let ctrl = link_b_control.clone();
-                    exec::spawn(async move { ctrl.pause_for(dur).await });
+                    wokio::spawn(async move { ctrl.pause_for(dur).await });
                 }
                 if let Some(when) = fail_link
                     && i == when
                 {
                     println!("failing link b");
                     let ctrl = link_b_control.clone();
-                    exec::spawn(async move { ctrl.disconnect().await });
+                    wokio::spawn(async move { ctrl.disconnect().await });
                 }
             },
             expected_send_err,

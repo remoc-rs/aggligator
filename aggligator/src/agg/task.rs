@@ -22,13 +22,13 @@ use tokio::{
     select,
     sync::{mpsc, oneshot, watch},
 };
+use wokio::time::{Instant, interval_stream, sleep_until, timeout};
 
 use crate::{
     agg::link_int::{DisconnectInitiator, LinkInt, LinkIntEvent, LinkTest},
     alc::{RecvError, SendError},
     cfg::{Cfg, ExchangedCfg, LinkCfg, LinkPing},
     control::{Direction, DisconnectReason, Link, NotWorkingReason, Stats},
-    exec::time::{Instant, interval_stream, sleep_until, timeout},
     id::{ConnId, LinkId, OwnedConnId},
     msg::{LinkMsg, RefusedReason, ReliableMsg},
     peekable_mpsc::{PeekableReceiver, RecvIfError},
@@ -2274,7 +2274,6 @@ where
     /// Sending over the channel is performed without blocking,
     /// i.e. if no sufficient send space is available the dump data is discarded.
     #[cfg(feature = "dump")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "dump")))]
     pub fn dump(&mut self, tx: mpsc::Sender<super::dump::ConnDump>) {
         self.dump_tx = Some(tx);
     }

@@ -16,7 +16,6 @@ static NAME: &str = "usb";
 const TIMEOUT: Duration = Duration::from_secs(1);
 
 #[cfg(feature = "host")]
-#[cfg_attr(docsrs, doc(cfg(feature = "host")))]
 mod host {
     use aggligator::io::{StreamBox, TxRxBox};
     use async_trait::async_trait;
@@ -319,11 +318,9 @@ mod host {
 }
 
 #[cfg(feature = "host")]
-#[cfg_attr(docsrs, doc(cfg(feature = "host")))]
 pub use host::*;
 
 #[cfg(feature = "device")]
-#[cfg_attr(docsrs, doc(cfg(feature = "device")))]
 mod device {
     use aggligator::{control::Direction, io::TxRxBox};
     use async_trait::async_trait;
@@ -434,5 +431,4 @@ mod device {
 }
 
 #[cfg(feature = "device")]
-#[cfg_attr(docsrs, doc(cfg(feature = "device")))]
 pub use device::*;

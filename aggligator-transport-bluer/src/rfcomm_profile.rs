@@ -17,6 +17,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::{Mutex, mpsc, watch};
+use wokio::time::timeout;
 
 #[doc(no_inline)]
 pub use bluer::{Address, Uuid, rfcomm::SocketAddr};
@@ -24,7 +25,6 @@ pub use bluer::{Address, Uuid, rfcomm::SocketAddr};
 use aggligator::{
     Link,
     control::Direction,
-    exec::time::timeout,
     io::{IoBox, StreamBox},
     transport::{AcceptedStreamBox, AcceptingTransport, ConnectingTransport, LinkTag, LinkTagBox},
 };

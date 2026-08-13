@@ -22,6 +22,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{mpsc, oneshot},
 };
+use wokio::time::{Instant, error::Elapsed, timeout};
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use crate::{
@@ -29,7 +30,6 @@ use crate::{
     alc::Channel,
     cfg::{Cfg, ExchangedCfg, LinkCfg},
     control::{Control, Direction, Link},
-    exec::time::{Instant, error::Elapsed, timeout},
     id::{ConnId, OwnedConnId, ServerId},
     io::{IoRx, IoTx},
     msg::{LinkMsg, RefusedReason},

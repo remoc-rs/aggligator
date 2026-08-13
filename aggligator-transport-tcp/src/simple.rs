@@ -9,7 +9,6 @@ use std::{future::Future, io::Result, net::SocketAddr};
 
 use aggligator::{
     alc::Stream,
-    exec,
     transport::{Acceptor, Connector},
 };
 
@@ -89,18 +88,16 @@ where
 
     loop {
         let (ch, _control) = acceptor.accept().await?;
-        exec::spawn(work_fn(ch.into_stream()));
+        wokio::spawn(work_fn(ch.into_stream()));
     }
 }
 
 #[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls {
     use std::{future::Future, io::Result, net::SocketAddr, sync::Arc};
 
     use aggligator::{
         alc::Stream,
-        exec,
         transport::{Acceptor, Connector},
     };
     use aggligator_wrapper_tls::{TlsClient, TlsServer};
@@ -228,11 +225,10 @@ mod tls {
 
         loop {
             let (ch, _control) = acceptor.accept().await?;
-            exec::spawn(work_fn(ch.into_stream()));
+            wokio::spawn(work_fn(ch.into_stream()));
         }
     }
 }
 
 #[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use tls::*;

@@ -101,6 +101,22 @@ automatically re-established.
 
 The minimum supported Rust version (MSRV) is 1.97.
 
+## Development
+
+Development on native platforms is straightforward. Use `cargo test` to run tests as usual.
+
+To run tests in a JavaScript runtime environment (for example `wasm32-unknown-unknown` with `js` feature) 
+install [`wasm-bindgen-test-runner`](https://github.com/wasm-bindgen/wasm-bindgen) and 
+[Google ChromeDriver](https://developer.chrome.com/docs/chromedriver/downloads).
+Then use the following command to execute the test suite:
+
+```
+WASM_BINDGEN_USE_BROWSER=1 WASM_BINDGEN_TEST_TIMEOUT=300 cargo +nightly test --target wasm32-unknown-unknown --features js --release --tests -p aggligator
+```
+
+A proper web-compatible runtime environment is required. Thus Node.js will not work. Deno should
+work, but it currently has some issues with the interaction between WebAssembly and async execution.
+
 ## License
 
 Aggligator is licensed under the [Apache 2.0 license].

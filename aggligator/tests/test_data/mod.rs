@@ -10,11 +10,9 @@ use std::{
     io::{self, BufRead},
     num::Wrapping,
 };
+use wokio::time::Instant;
 
-use aggligator::{
-    alc::{Receiver, RecvError, SendError, Sender},
-    exec::time::Instant,
-};
+use aggligator::alc::{Receiver, RecvError, SendError, Sender};
 
 /// Test data generator.
 pub struct Generator {

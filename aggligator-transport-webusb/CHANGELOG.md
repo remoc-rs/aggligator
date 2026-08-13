@@ -12,9 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Sync` on the web
 - the filter function passed to `WebUsbConnector::new` no longer needs to be
   `Send` and `Sync`
+- the sleep timer of wokio is used instead of an internal implementation
 
 ### Removed
-- dependency on threadporter
+- dependencies on threadporter, js-sys, wasm-bindgen and web-sys
 
 ## 0.7.0 - 2026-08-03
 ### Changed

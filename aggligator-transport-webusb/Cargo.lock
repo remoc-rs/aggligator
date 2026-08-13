@@ -35,13 +35,11 @@ dependencies = [
  "bimap",
  "bytes",
  "futures",
- "js-sys",
  "tokio",
  "tracing",
  "upc",
- "wasm-bindgen",
- "web-sys",
  "webusb-web",
+ "wokio",
 ]
 
 [[package]]
@@ -635,7 +633,9 @@ dependencies = [
 
 [[package]]
 name = "wokio"
-version = "0.1.0"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43f1149ef85a8f3e50a4fc37903b22c61c0b5b7cc55aee92e7c819d204ce3d18"
 dependencies = [
  "futures",
  "js-sys",

@@ -25,6 +25,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::watch;
+use wokio::time::sleep;
 
 use aggligator::{
     control::Direction,
@@ -34,9 +35,6 @@ use aggligator::{
 
 pub use webusb_web;
 use webusb_web::{Usb, UsbDevice, UsbInterface};
-
-mod sleep;
-use sleep::JsSleep;
 
 static NAME: &str = "webusb";
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
@@ -204,7 +202,7 @@ impl ConnectingTransport for WebUsbConnector {
                         break;
                     }
                 }
-                () = JsSleep::new(POLL_INTERVAL) => (),
+                () = sleep(POLL_INTERVAL) => (),
             }
         }
 

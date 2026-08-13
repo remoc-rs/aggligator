@@ -2,7 +2,7 @@
 
 [![crates.io page](https://img.shields.io/crates/v/aggligator)](https://crates.io/crates/aggligator)
 [![docs.rs page](https://docs.rs/aggligator/badge.svg)](https://docs.rs/aggligator)
-[![Apache 2.0 license](https://img.shields.io/crates/l/aggligator)](https://raw.githubusercontent.com/surban/aggligator/master/LICENSE)
+[![Apache 2.0 license](https://img.shields.io/crates/l/aggligator)](https://raw.githubusercontent.com/remoc-rs/aggligator/master/LICENSE)
 
 Aggligator aggregates multiple links into one connection.
 
@@ -87,7 +87,7 @@ Machine B, acting as the speed test client, has four interfaces: `enp0s25` (giga
 
 Running the `agg-speed` tool from the [aggligator-util] crate on Machine B shows the following.
 
-![Interactive monitor](https://raw.githubusercontent.com/surban/aggligator/master/.misc/monitor.png)
+![Interactive monitor](https://raw.githubusercontent.com/remoc-rs/aggligator/master/.misc/monitor.png)
 
 Aggligator has created 8 links between the machines, one for each pair of machine A and machine B interfaces.
 The connection speed is about 100 MB/s in both directions which is expected from a full-duplex gigabit ethernet link.
@@ -121,7 +121,7 @@ work, but it currently has some issues with the interaction between WebAssembly 
 
 Aggligator is licensed under the [Apache 2.0 license].
 
-[Apache 2.0 license]: https://github.com/surban/aggligator/blob/master/LICENSE
+[Apache 2.0 license]: https://github.com/remoc-rs/aggligator/blob/master/LICENSE
 
 ### Contribution
 

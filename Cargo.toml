@@ -19,7 +19,7 @@ rust-version = "1.97"
 authors = ["Sebastian Urban <surban@surban.net>"]
 license = "Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/surban/aggligator"
+repository = "https://github.com/remoc-rs/aggligator"
 
 [workspace.dependencies]
 async-trait = "0.1"

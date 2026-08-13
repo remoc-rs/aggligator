@@ -2,7 +2,7 @@
 
 [![crates.io page](https://img.shields.io/crates/v/aggligator-util)](https://crates.io/crates/aggligator-util)
 [![docs.rs page](https://docs.rs/aggligator-util/badge.svg)](https://docs.rs/aggligator-util)
-[![Apache 2.0 license](https://img.shields.io/crates/l/aggligator-util)](https://raw.githubusercontent.com/surban/aggligator/master/LICENSE)
+[![Apache 2.0 license](https://img.shields.io/crates/l/aggligator-util)](https://raw.githubusercontent.com/remoc-rs/aggligator/master/LICENSE)
 
 This crate provides command line tools for working with the [Aggligator link aggregator].
 
@@ -34,7 +34,7 @@ Run the following command to install the command line tools:
 
 Aggligator is licensed under the [Apache 2.0 license].
 
-[Apache 2.0 license]: https://github.com/surban/aggligator/blob/master/LICENSE
+[Apache 2.0 license]: https://github.com/remoc-rs/aggligator/blob/master/LICENSE
 
 ### Contribution
 

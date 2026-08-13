@@ -9,7 +9,7 @@ edition = "2024"
 rust-version = "1.97"
 authors = ["Sebastian Urban <surban@surban.net>"]
 license = "Apache-2.0"
-repository = "https://github.com/surban/aggligator"
+repository = "https://github.com/remoc-rs/aggligator"
 
 [dependencies]
 aggligator = { version = "0.12.0", path = "../aggligator", features = ["js"] }

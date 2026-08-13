@@ -2,7 +2,7 @@
 
 [![crates.io page](https://img.shields.io/crates/v/aggligator-transport-websocket)](https://crates.io/crates/aggligator-transport-websocket)
 [![docs.rs page](https://docs.rs/aggligator-transport-websocket/badge.svg)](https://docs.rs/aggligator-transport-websocket)
-[![Apache 2.0 license](https://img.shields.io/crates/l/aggligator-transport-websocket)](https://raw.githubusercontent.com/surban/aggligator/master/LICENSE)
+[![Apache 2.0 license](https://img.shields.io/crates/l/aggligator-transport-websocket)](https://raw.githubusercontent.com/remoc-rs/aggligator/master/LICENSE)
 
 This crate provides WebSocket transport with optional TLS encryption for the [Aggligator link aggregator].
 
@@ -12,7 +12,7 @@ This crate provides WebSocket transport with optional TLS encryption for the [Ag
 
 Aggligator is licensed under the [Apache 2.0 license].
 
-[Apache 2.0 license]: https://github.com/surban/aggligator/blob/master/LICENSE
+[Apache 2.0 license]: https://github.com/remoc-rs/aggligator/blob/master/LICENSE
 
 ### Contribution
 

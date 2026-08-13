@@ -8,7 +8,7 @@ use std::{
 };
 use wokio::time::timeout;
 
-#[cfg(feature = "js")]
+#[cfg(all(target_family = "wasm", feature = "js"))]
 use wasm_bindgen_test::wasm_bindgen_test;
 
 use crate::test_data::send_and_verify;
@@ -244,8 +244,11 @@ async fn single_link_test(
     join!(server_task, client_task);
 }
 
-#[cfg_attr(not(feature = "js"), test_log::test(tokio::test(flavor = "multi_thread")))]
-#[cfg_attr(feature = "js", wasm_bindgen_test)]
+#[cfg_attr(
+    not(all(target_family = "wasm", feature = "js")),
+    test_log::test(tokio::test(flavor = "multi_thread"))
+)]
+#[cfg_attr(all(target_family = "wasm", feature = "js"), wasm_bindgen_test)]
 async fn termination() {
     let ch_cfg = test_channel::Cfg { speed: 0, latency: None, ..Default::default() };
     let alc_cfg = Cfg { ..Default::default() };
@@ -253,8 +256,11 @@ async fn termination() {
     single_link_test(ch_cfg, alc_cfg, 16384, 10, 0, None, None).await;
 }
 
-#[cfg_attr(not(feature = "js"), test_log::test(tokio::test(flavor = "multi_thread")))]
-#[cfg_attr(feature = "js", wasm_bindgen_test)]
+#[cfg_attr(
+    not(all(target_family = "wasm", feature = "js")),
+    test_log::test(tokio::test(flavor = "multi_thread"))
+)]
+#[cfg_attr(all(target_family = "wasm", feature = "js"), wasm_bindgen_test)]
 async fn unlimited_multi_thread() {
     let ch_cfg = test_channel::Cfg { speed: 0, latency: None, ..Default::default() };
     let alc_cfg = Cfg { ..Default::default() };
@@ -262,8 +268,11 @@ async fn unlimited_multi_thread() {
     single_link_test(ch_cfg, alc_cfg, 16384, 10000, 10_000_000, None, None).await;
 }
 
-#[cfg_attr(not(feature = "js"), test_log::test(tokio::test(flavor = "current_thread")))]
-#[cfg_attr(feature = "js", wasm_bindgen_test)]
+#[cfg_attr(
+    not(all(target_family = "wasm", feature = "js")),
+    test_log::test(tokio::test(flavor = "current_thread"))
+)]
+#[cfg_attr(all(target_family = "wasm", feature = "js"), wasm_bindgen_test)]
 async fn unlimited_current_thread() {
     let ch_cfg = test_channel::Cfg { speed: 0, latency: None, ..Default::default() };
     let alc_cfg = Cfg { ..Default::default() };
@@ -271,8 +280,11 @@ async fn unlimited_current_thread() {
     single_link_test(ch_cfg, alc_cfg, 16384, 10000, 10_000_000, None, None).await;
 }
 
-#[cfg_attr(not(feature = "js"), test_log::test(tokio::test(flavor = "multi_thread")))]
-#[cfg_attr(feature = "js", wasm_bindgen_test)]
+#[cfg_attr(
+    not(all(target_family = "wasm", feature = "js")),
+    test_log::test(tokio::test(flavor = "multi_thread"))
+)]
+#[cfg_attr(all(target_family = "wasm", feature = "js"), wasm_bindgen_test)]
 async fn very_high_latency() {
     let ch_cfg = test_channel::Cfg {
         speed: 10_000_000,
@@ -296,8 +308,11 @@ async fn very_high_latency() {
     single_link_test(ch_cfg, alc_cfg, 16384, 1000, 1_000_000, None, None).await;
 }
 
-#[cfg_attr(not(feature = "js"), test_log::test(tokio::test(flavor = "multi_thread")))]
-#[cfg_attr(feature = "js", wasm_bindgen_test)]
+#[cfg_attr(
+    not(all(target_family = "wasm", feature = "js")),
+    test_log::test(tokio::test(flavor = "multi_thread"))
+)]
+#[cfg_attr(all(target_family = "wasm", feature = "js"), wasm_bindgen_test)]
 async fn one_mb_per_s() {
     let ch_cfg = test_channel::Cfg {
         speed: 1_000_000,
@@ -314,8 +329,11 @@ async fn one_mb_per_s() {
     single_link_test(ch_cfg, alc_cfg, 16384, 1000, 500_000, None, None).await;
 }
 
-#[cfg_attr(not(feature = "js"), test_log::test(tokio::test(flavor = "multi_thread")))]
-#[cfg_attr(feature = "js", wasm_bindgen_test)]
+#[cfg_attr(
+    not(all(target_family = "wasm", feature = "js")),
+    test_log::test(tokio::test(flavor = "multi_thread"))
+)]
+#[cfg_attr(all(target_family = "wasm", feature = "js"), wasm_bindgen_test)]
 async fn ten_mb_per_s() {
     let ch_cfg = test_channel::Cfg {
         speed: 10_000_000,
@@ -332,8 +350,11 @@ async fn ten_mb_per_s() {
     single_link_test(ch_cfg, alc_cfg, 16384, 10000, 5_000_000, None, None).await;
 }
 
-#[cfg_attr(not(feature = "js"), test_log::test(tokio::test(flavor = "multi_thread")))]
-#[cfg_attr(feature = "js", wasm_bindgen_test)]
+#[cfg_attr(
+    not(all(target_family = "wasm", feature = "js")),
+    test_log::test(tokio::test(flavor = "multi_thread"))
+)]
+#[cfg_attr(all(target_family = "wasm", feature = "js"), wasm_bindgen_test)]
 async fn paused_link() {
     let ch_cfg = test_channel::Cfg {
         speed: 1_000_000,
@@ -349,8 +370,11 @@ async fn paused_link() {
     single_link_test(ch_cfg, alc_cfg, 16384, 300, 0, Some((100, Duration::from_secs(3))), None).await;
 }
 
-#[cfg_attr(not(feature = "js"), test_log::test(tokio::test(flavor = "multi_thread")))]
-#[cfg_attr(feature = "js", wasm_bindgen_test)]
+#[cfg_attr(
+    not(all(target_family = "wasm", feature = "js")),
+    test_log::test(tokio::test(flavor = "multi_thread"))
+)]
+#[cfg_attr(all(target_family = "wasm", feature = "js"), wasm_bindgen_test)]
 async fn timed_out_link() {
     let ch_cfg = test_channel::Cfg {
         speed: 1_000_000,
@@ -375,8 +399,11 @@ async fn timed_out_link() {
     single_link_test(ch_cfg, alc_cfg, 16384, 300, 0, Some((100, Duration::from_secs(10000))), Some(1000)).await;
 }
 
-#[cfg_attr(not(feature = "js"), test_log::test(tokio::test(flavor = "multi_thread")))]
-#[cfg_attr(feature = "js", wasm_bindgen_test)]
+#[cfg_attr(
+    not(all(target_family = "wasm", feature = "js")),
+    test_log::test(tokio::test(flavor = "multi_thread"))
+)]
+#[cfg_attr(all(target_family = "wasm", feature = "js"), wasm_bindgen_test)]
 async fn failed_link() {
     let ch_cfg = test_channel::Cfg {
         speed: 1_000_000,

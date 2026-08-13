@@ -5,11 +5,10 @@ All notable changes to Aggligator will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.11.0 - 2026-08-13
 ### Changed
 - types don't require Send + Sync on the web (`js` crate feature)
-- the `js` crate feature is now ignored on non-WebAssembly targets instead of
-  selecting the web backend and failing to build
+- the `js` crate feature is now ignored on non-WebAssembly targets
 
 ## 0.10.1 - 2026-08-03
 ### Fixed
@@ -221,4 +220,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## 0.1.0
 ### Added
 - initial release
-

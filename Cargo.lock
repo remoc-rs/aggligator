@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "aggligator"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "async-trait",
  "atomic_refcell",
@@ -33,7 +33,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-monitor"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "aggligator",
  "crossterm",
@@ -46,7 +46,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-transport-bluer"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "aggligator",
  "async-trait",
@@ -58,7 +58,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-transport-socks"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aggligator",
  "async-trait",
@@ -69,7 +69,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-transport-tcp"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggligator",
  "aggligator-wrapper-tls",
@@ -83,7 +83,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-transport-usb"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "aggligator",
  "async-trait",
@@ -97,7 +97,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-transport-websocket"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aggligator",
  "aggligator-transport-tcp",
@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-util"
-version = "0.19.1"
+version = "0.20.0"
 dependencies = [
  "aggligator",
  "aggligator-monitor",
@@ -149,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-wrapper-tls"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aggligator",
  "async-trait",

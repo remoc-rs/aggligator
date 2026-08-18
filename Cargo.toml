@@ -19,6 +19,7 @@ rust-version = "1.97"
 authors = ["Sebastian Urban <surban@surban.net>"]
 license = "Apache-2.0"
 readme = "README.md"
+homepage = "https://remoc.rs/aggligator/"
 repository = "https://github.com/remoc-rs/aggligator"
 
 [workspace.dependencies]

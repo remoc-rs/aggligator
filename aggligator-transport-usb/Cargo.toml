@@ -9,6 +9,7 @@ edition.workspace = true
 rust-version = "1.97"
 authors.workspace = true
 license.workspace = true
+homepage.workspace = true
 repository.workspace = true
 
 [features]

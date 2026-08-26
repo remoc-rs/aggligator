@@ -83,7 +83,7 @@ jobs:
           name: aggligator-x86_64-unknown-linux-musl
           path: bin/ubuntu-x86_64
       - name: Compress binaries (Ubuntu x86_64)
-        run: tar -czf aggligator-x86_64-unknown-linux-musl.tar.gz bin/ubuntu-x86_64/*
+        run: tar -czf aggligator-x86_64-unknown-linux-musl.tar.gz -C bin/ubuntu-x86_64 agg-speed agg-tunnel
       - name: Attach (Ubuntu x86_64) to release
         uses: svenstaro/upload-release-action@v2
         with:
@@ -98,7 +98,7 @@ jobs:
           name: aggligator-aarch64-unknown-linux-musl
           path: bin/ubuntu-aarch64
       - name: Compress binaries (Ubuntu aarch64)
-        run: tar -czf aggligator-aarch64-unknown-linux-musl.tar.gz bin/ubuntu-aarch64/*
+        run: tar -czf aggligator-aarch64-unknown-linux-musl.tar.gz -C bin/ubuntu-aarch64 agg-speed agg-tunnel
       - name: Attach (Ubuntu aarch64) to release
         uses: svenstaro/upload-release-action@v2
         with:
@@ -113,7 +113,7 @@ jobs:
           name: aggligator-macos-latest
           path: bin/macos
       - name: Compress binaries (macOS)
-        run: tar -czf aggligator-macos-latest.tar.gz bin/macos/*
+        run: tar -czf aggligator-macos-latest.tar.gz -C bin/macos agg-speed agg-tunnel
       - name: Attach (macOS) to release
         uses: svenstaro/upload-release-action@v2
         with:

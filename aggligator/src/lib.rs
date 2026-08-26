@@ -29,6 +29,9 @@
 //! Aggligator is written in 100% safe Rust and builds upon the [Tokio](tokio)
 //! asynchronous runtime. It works on all major native platform as well as WebAssembly.
 //!
+//! An illustrated overview and the `agg-tunnel` utility are available at
+//! [remoc.rs/aggligator](https://remoc.rs/aggligator/).
+//!
 //! [TCP]: https://en.wikipedia.org/wiki/Transmission_Control_Protocol
 //! [Multipath TCP]: https://en.wikipedia.org/wiki/Multipath_TCP
 //! [SCTP]: https://en.wikipedia.org/wiki/Stream_Control_Transmission_Protocol

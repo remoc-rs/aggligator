@@ -1,5 +1,6 @@
 # Aggligator — your friendly link aggregator
 
+[![website](https://img.shields.io/badge/website-remoc.rs%2Faggligator-blue)](https://remoc.rs/aggligator/)
 [![crates.io page](https://img.shields.io/crates/v/aggligator)](https://crates.io/crates/aggligator)
 [![docs.rs page](https://docs.rs/aggligator/badge.svg)](https://docs.rs/aggligator)
 [![Apache 2.0 license](https://img.shields.io/crates/l/aggligator)](https://raw.githubusercontent.com/remoc-rs/aggligator/master/LICENSE)
@@ -23,6 +24,9 @@ application connection rather than the whole machine.
 
 Aggligator is written in 100% safe [Rust] and builds upon the [Tokio]
 asynchronous runtime. It works on all major native platform as well as WebAssembly.
+
+An illustrated overview and the `agg-tunnel` utility are available at
+[remoc.rs/aggligator](https://remoc.rs/aggligator/).
 
 [TCP]: https://en.wikipedia.org/wiki/Transmission_Control_Protocol
 [Multipath TCP]: https://en.wikipedia.org/wiki/Multipath_TCP

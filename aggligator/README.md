@@ -4,12 +4,15 @@
 [![docs.rs page](https://docs.rs/aggligator/badge.svg)](https://docs.rs/aggligator)
 [![Apache 2.0 license](https://img.shields.io/crates/l/aggligator)](https://raw.githubusercontent.com/remoc-rs/aggligator/master/LICENSE)
 
-Aggligator aggregates multiple links into one connection.
+Aggligator combines one or more network links (for example [TCP] connections)
+between two endpoints into one logical connection. When several links are
+available, data is distributed across their combined capacity. Links can fail,
+return, be added or be removed while the connection runs.
 
-Aggligator takes multiple network links (for example [TCP] connections) between two
-endpoints and combines them into one connection that has the combined bandwidth
-of all links. Additionally it provides resiliency against failure of individual
-links and allows adding and removing of links on-the-fly.
+If every link disappears, transport connectors keep trying to re-establish one
+while the logical connection remains open for a configurable time. A device can
+therefore switch between Wi-Fi, mobile data and Ethernet, even with an IP address
+change, without restarting the application connection.
 
 It serves the same purpose as [Multipath TCP] and [SCTP] but works over existing,
 widely adopted protocols such as TCP, HTTPS, TLS, USB and WebSockets and is completely

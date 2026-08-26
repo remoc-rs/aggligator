@@ -1,6 +1,6 @@
 [package]
 name = "aggligator"
-version = "0.12.0"
+version = "0.12.1"
 description = "Aggregates multiple links (TCP, WebSocket, USB or similar) into one connection having their combined bandwidth and provides resiliency against failure of individual links, allowing failover and roaming between networks in user space."
 categories = ["asynchronous", "network-programming"]
 keywords = ["multipath", "bonding", "link-aggregation", "failover", "roaming"]

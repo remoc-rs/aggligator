@@ -9,7 +9,7 @@
 //! [Aggligator](aggligator) transport: TCP
 //!
 //! #### Simple aggregation of TCP links
-//! Use the [tcp_connect](simple::tcp_connect) and [tcp_server](simple::tcp_server) functions
+//! Use the [tcp_connect](simple::tcp_connect) and [tcp_listen](simple::tcp_listen) functions
 //! from the [simple module](simple).
 
 use aggligator::{

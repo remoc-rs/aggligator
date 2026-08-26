@@ -5,7 +5,7 @@
 //! accept incoming connections consisting of aggregated TCP links.
 //!
 
-use std::{future::Future, io::Result, net::SocketAddr};
+use std::{io::Result, net::SocketAddr};
 
 use aggligator::{
     alc::Stream,
@@ -52,11 +52,34 @@ pub async fn tcp_connect(target: impl IntoIterator<Item = impl AsRef<str>>, defa
     Ok(ch.into_stream())
 }
 
-/// Runs a TCP server accepting connections of aggregated links.
+/// Listener for incoming connections of aggregated TCP links.
 ///
-/// The TCP server listens on `addr` and accepts connections of aggregated TCP links.
-/// For each new connection the work function `work_fn` is spawned onto a new
-/// Tokio task.
+/// Create this using [`tcp_listen`] or, for TLS-encrypted connections,
+/// [`tls_listen`].
+#[derive(Debug)]
+pub struct Listener(Acceptor);
+
+impl Listener {
+    /// Waits for an incoming connection of aggregated TCP links and accepts it.
+    ///
+    /// Returns the connection stream.
+    ///
+    /// This function is cancel-safe.
+    pub async fn accept(&self) -> Result<Stream> {
+        let (ch, _control) = self.0.accept().await?;
+        Ok(ch.into_stream())
+    }
+
+    /// The underlying acceptor.
+    ///
+    /// Use this for advanced configuration and monitoring, for example to
+    /// subscribe to link errors using [`Acceptor::link_errors`].
+    pub fn acceptor(&self) -> &Acceptor {
+        &self.0
+    }
+}
+
+/// Listens on `addr` for incoming connections of aggregated TCP links.
 ///
 /// # Example
 /// This example listens on all interfaces on port 5900.
@@ -65,36 +88,32 @@ pub async fn tcp_connect(target: impl IntoIterator<Item = impl AsRef<str>>, defa
 /// in DNS so that clients can discover them and establish multiple links.
 /// ```no_run
 /// use std::net::{Ipv6Addr, SocketAddr};
-/// use aggligator_transport_tcp::simple::tcp_server;
+/// use aggligator_transport_tcp::simple::tcp_listen;
 ///
 /// #[tokio::main]
 /// async fn main() -> std::io::Result<()> {
-///     tcp_server(
-///         SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 5900),
-///         |stream| async move {
-///             // use the incoming connection
-///         }
+///     let listener = tcp_listen(
+///         SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 5900)
 ///     ).await?;
 ///
-///     Ok(())
+///     loop {
+///         let stream = listener.accept().await?;
+///
+///         tokio::spawn(async move {
+///             // use the incoming connection
+///         });
+///     }
 /// }
 /// ```
-pub async fn tcp_server<F>(addr: SocketAddr, work_fn: impl Fn(Stream) -> F + Send + 'static) -> Result<()>
-where
-    F: Future<Output = ()> + Send + 'static,
-{
+pub async fn tcp_listen(addr: SocketAddr) -> Result<Listener> {
     let acceptor = Acceptor::new();
     acceptor.add(TcpAcceptor::new([addr]).await?);
-
-    loop {
-        let (ch, _control) = acceptor.accept().await?;
-        tokio::spawn(work_fn(ch.into_stream()));
-    }
+    Ok(Listener(acceptor))
 }
 
 #[cfg(feature = "tls")]
 mod tls {
-    use std::{future::Future, io::Result, net::SocketAddr, sync::Arc};
+    use std::{io::Result, net::SocketAddr, sync::Arc};
 
     use aggligator::{
         alc::Stream,
@@ -105,6 +124,7 @@ mod tls {
     #[doc(no_inline)]
     pub use aggligator_wrapper_tls::{ClientConfig, RootCertStore, ServerConfig, ServerName};
 
+    use super::Listener;
     use crate::{TcpAcceptor, TcpConnector};
 
     /// Builds a connection consisting of aggregated TCP links to the target,
@@ -171,12 +191,8 @@ mod tls {
         Ok(ch.into_stream())
     }
 
-    /// Runs a TCP server accepting connections of aggregated links,
+    /// Listens on `addr` for incoming connections of aggregated TCP links,
     /// which are encrypted and authenticated using TLS.
-    ///
-    /// The TCP server listens on `addr` and accepts connections of aggregated TCP links.
-    /// For each new connection the work function `work_fn` is spawned onto a new
-    /// Tokio task.
     ///
     /// Each incoming link is encrypted using TLS with the configuration specified
     /// in `tls_server_cfg`.
@@ -189,7 +205,7 @@ mod tls {
     /// ```no_run
     /// use std::net::{Ipv6Addr, SocketAddr};
     /// use std::sync::Arc;
-    /// use aggligator_transport_tcp::simple::{tls_server, ServerConfig};
+    /// use aggligator_transport_tcp::simple::{tls_listen, ServerConfig};
     ///
     /// #[tokio::main]
     /// async fn main() -> std::io::Result<()> {
@@ -203,30 +219,24 @@ mod tls {
     ///             .unwrap()
     ///     );
     ///
-    ///     tls_server(
+    ///     let listener = tls_listen(
     ///         SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 5901),
     ///         tls_cfg,
-    ///         |stream| async move {
-    ///             // use the incoming connection
-    ///         }
     ///     ).await?;
     ///
-    ///     Ok(())
+    ///     loop {
+    ///         let stream = listener.accept().await?;
+    ///
+    ///         tokio::spawn(async move {
+    ///             // use the incoming connection
+    ///         });
+    ///     }
     /// }
     /// ```
-    pub async fn tls_server<F>(
-        addr: SocketAddr, tls_server_cfg: Arc<ServerConfig>, work_fn: impl Fn(Stream) -> F + Send + 'static,
-    ) -> Result<()>
-    where
-        F: Future<Output = ()> + Send + 'static,
-    {
+    pub async fn tls_listen(addr: SocketAddr, tls_server_cfg: Arc<ServerConfig>) -> Result<Listener> {
         let acceptor = Acceptor::wrapped(TlsServer::new(tls_server_cfg));
         acceptor.add(TcpAcceptor::new([addr]).await?);
-
-        loop {
-            let (ch, _control) = acceptor.accept().await?;
-            tokio::spawn(work_fn(ch.into_stream()));
-        }
+        Ok(Listener(acceptor))
     }
 }
 

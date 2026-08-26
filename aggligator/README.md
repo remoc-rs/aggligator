@@ -17,6 +17,9 @@ change, without restarting the application connection.
 It serves the same purpose as [Multipath TCP] and [SCTP] but works over existing,
 widely adopted protocols such as TCP, HTTPS, TLS, USB and WebSockets and is completely
 implemented in user space without the need for any support from the operating system.
+In networking terms, Aggligator provides link aggregation (also known as channel
+bonding), failover between links and roaming between networks, all for a single
+application connection rather than the whole machine.
 
 Aggligator is written in 100% safe [Rust] and builds upon the [Tokio]
 asynchronous runtime. It works on all major native platform as well as WebAssembly.

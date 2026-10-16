@@ -1411,10 +1411,10 @@ where
                 // Decrease limit.
                 let current = link.txed_unacked_data.min(link.txed_unacked_data_limit);
                 if hard_overrun {
-                    link.txed_unacked_data_limit = current / 2;
+                    link.txed_unacked_data_limit = (current / 2).max(link.link_cfg().unacked_init.get());
                     self.tx_overrun = SendOverrun::Hard;
                 } else if soft_overrun {
-                    link.txed_unacked_data_limit = current * 95 / 100;
+                    link.txed_unacked_data_limit = (current * 95 / 100).max(link.link_cfg().unacked_init.get());
                     self.tx_overrun = SendOverrun::Soft;
                 }
                 self.tx_overrun_since = Some(Instant::now());
@@ -1461,7 +1461,7 @@ where
                 {
                     // Decrease limit.
                     let current = link.txed_unacked_data.min(link.txed_unacked_data_limit);
-                    link.txed_unacked_data_limit = current * 95 / 100;
+                    link.txed_unacked_data_limit = (current * 95 / 100).max(link.link_cfg().unacked_init.get());
                     tracing::trace!(
                         link_id =? link.link_id(), tag =% link.tag(),
                         "decreasing unacked limit of link to {} bytes due to ping",
@@ -1489,7 +1489,7 @@ where
                 {
                     // Decrease limit.
                     let current = link.txed_unacked_data.min(link.txed_unacked_data_limit);
-                    link.txed_unacked_data_limit = current * 95 / 100;
+                    link.txed_unacked_data_limit = (current * 95 / 100).max(link.link_cfg().unacked_init.get());
                     tracing::trace!(
                         link_id =? link.link_id(), tag =% link.tag(),
                         "decreasing unacked limit of link to {} bytes due to ping spread limit ({} ms, limit={} ms)",

@@ -29,6 +29,9 @@ use crate::{
     seq::Seq,
 };
 
+/// Number of roundtrip estimates to treat as reliable.
+pub(crate) const RELIABLE_ROUNDTRIP_ESTIMATES: usize = 10;
+
 /// Optional deadline.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct Deadline {
@@ -208,6 +211,8 @@ pub(crate) struct LinkInt<TX, RX, TAG> {
     pub(crate) roundtrip: Duration,
     /// Number of reliable roundtrip estimates.
     pub(crate) roundtrip_estimates: Option<usize>,
+    /// Bytes acknowledged since `roundtrip_estimates` was last set.
+    roundtrip_estimates_acked: usize,
     /// When last ping has been performed.
     pub(crate) last_ping: Option<Instant>,
     /// When current (not yet answered) ping has been sent.
@@ -324,6 +329,7 @@ where
             send_pong: false,
             roundtrip,
             roundtrip_estimates: Some(0),
+            roundtrip_estimates_acked: 0,
             disconnecting: None,
             txed_unacked_data: 0,
             txed_unacked_data_limit,
@@ -787,6 +793,37 @@ where
     /// Since when transmitter is being polled for readyness.
     pub(crate) fn tx_polling(&self) -> Option<Instant> {
         self.tx_polling
+    }
+
+    /// Sets the number of roundtrip estimates since the roundtrip time was last reset.
+    pub(crate) fn set_roundtrip_estimates(&mut self, roundtrip_estimates: Option<usize>) {
+        self.roundtrip_estimates = roundtrip_estimates;
+        self.roundtrip_estimates_acked = 0;
+    }
+
+    /// Records a roundtrip estimate obtained from acknowledgement of `size` bytes.
+    pub(crate) fn add_roundtrip_estimate(&mut self, size: usize) {
+        if let Some(n) = &mut self.roundtrip_estimates {
+            *n = n.saturating_add(1);
+            self.roundtrip_estimates_acked = self.roundtrip_estimates_acked.saturating_add(size);
+        }
+    }
+
+    /// Whether the roundtrip time estimate is reliable.
+    pub(crate) fn roundtrip_reliable(&self) -> bool {
+        self.roundtrip_estimates.is_some_and(|n| n >= RELIABLE_ROUNDTRIP_ESTIMATES)
+    }
+
+    /// Whether the roundtrip time estimate is reliable enough for increasing the limit
+    /// of sent unacknowledged data.
+    ///
+    /// In addition to [`roundtrip_reliable`](Self::roundtrip_reliable), this is the case
+    /// for a link with a small limit when that amount of data has been acknowledged since
+    /// the estimate was reset, i.e. after one roundtrip.
+    pub(crate) fn roundtrip_reliable_for_increase(&self) -> bool {
+        self.roundtrip_estimates.is_some_and(|n| {
+            n >= RELIABLE_ROUNDTRIP_ESTIMATES || self.roundtrip_estimates_acked >= self.txed_unacked_data_limit
+        })
     }
 
     /// Reset statistics and limits when the link is unconfirmed.

@@ -36,9 +36,6 @@ use crate::{
     seq::Seq,
 };
 
-/// Number of roundtrip estimates to treat as reliable.
-const RELIABLE_ROUNDTRIP_ESTIMATES: usize = 10;
-
 /// Error indicating why a connection of aggregated links failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TaskError {
@@ -1324,11 +1321,7 @@ where
             .links
             .iter()
             .filter_map(|link_opt| link_opt.as_ref())
-            .filter(|link| {
-                link.unconfirmed().is_none()
-                    && !link.is_blocked()
-                    && link.roundtrip_estimates.is_some_and(|n| n >= RELIABLE_ROUNDTRIP_ESTIMATES)
-            })
+            .filter(|link| link.unconfirmed().is_none() && !link.is_blocked() && link.roundtrip_reliable())
             .map(|link| link.roundtrip)
             .min()?;
 
@@ -1371,9 +1364,7 @@ where
         // Check for link ping exceeds ping spread limit.
         if let Some((limit_ping, _good_ping)) = self.ping_spread_limits() {
             for (id, link) in &confirmed_links {
-                if link.roundtrip > 2 * limit_ping
-                    && link.roundtrip_estimates.is_some_and(|n| n >= RELIABLE_ROUNDTRIP_ESTIMATES)
-                {
+                if link.roundtrip > 2 * limit_ping && link.roundtrip_reliable() {
                     tracing::debug!(
                         link_id =? link.link_id(), tag =% link.tag(),
                         "unconfirming link due to ping of {} ms twice above ping spread limit of {} ms",
@@ -1494,7 +1485,7 @@ where
                     && link.unconfirmed().is_none()
                     && !link.is_blocked()
                     && link.roundtrip > limit_ping
-                    && link.roundtrip_estimates.is_some_and(|n| n >= RELIABLE_ROUNDTRIP_ESTIMATES)
+                    && link.roundtrip_reliable()
                 {
                     // Decrease limit.
                     let current = link.txed_unacked_data.min(link.txed_unacked_data_limit);
@@ -1510,7 +1501,7 @@ where
                     // Block link from increasing its send data limit.
                     link.txed_unacked_data_limit_increased = Some(coming_seq);
                     link.txed_unacked_data_limit_increased_consecutively = 0;
-                    link.roundtrip_estimates = None;
+                    link.set_roundtrip_estimates(None);
                 }
             }
         }
@@ -1551,8 +1542,7 @@ where
                         .max_ping
                         .is_none_or(|max_ping| link.roundtrip <= max_ping / 2 || all_links_slow)
                     && good_ping.is_none_or(|good_ping| {
-                        link.roundtrip <= good_ping
-                            && link.roundtrip_estimates.is_some_and(|n| n >= RELIABLE_ROUNDTRIP_ESTIMATES)
+                        link.roundtrip <= good_ping && link.roundtrip_reliable_for_increase()
                     })
                 {
                     // Increase limit, faster if done many times consecutively.
@@ -1587,7 +1577,7 @@ where
                     link.txed_unacked_data_limit_increased = Some(coming_seq);
                     link.txed_unacked_data_limit_increased_consecutively =
                         link.txed_unacked_data_limit_increased_consecutively.saturating_add(1);
-                    link.roundtrip_estimates = None;
+                    link.set_roundtrip_estimates(None);
                 }
             }
         }
@@ -1646,7 +1636,7 @@ where
                 if *resent {
                     fac *= link.link_cfg().ack_timeout_resent_factor.get()
                 }
-                if link.roundtrip_estimates.unwrap_or_default() < RELIABLE_ROUNDTRIP_ESTIMATES {
+                if !link.roundtrip_reliable() {
                     fac *= link.link_cfg().ack_timeout_unreliable_factor.get();
                 }
 
@@ -1981,7 +1971,7 @@ where
                     let elapsed = current_ping_sent.elapsed();
                     tracing::trace!(?link_id, tag =% link.tag(), "ping round-trip time is {} ms", elapsed.as_millis());
                     link.roundtrip = elapsed;
-                    link.roundtrip_estimates = Some(1);
+                    link.set_roundtrip_estimates(Some(1));
                     link.last_ping = Some(Instant::now());
                     self.link_testing_step(id);
                 }
@@ -2153,7 +2143,7 @@ where
                 tracing::trace!(?link_id, %tag, "re-allowing increase of send limit of link");
                 link.txed_unacked_data_limit_increased = None;
             } else {
-                link.roundtrip_estimates = Some(0);
+                link.set_roundtrip_estimates(Some(0));
             }
         }
 
@@ -2181,9 +2171,7 @@ where
                         link.roundtrip = (99 * link.roundtrip + sent.elapsed()) / 100;
                     }
 
-                    if let Some(n) = &mut link.roundtrip_estimates {
-                        *n = n.saturating_add(1);
-                    }
+                    link.add_roundtrip_estimate(size);
 
                     *status = SentReliableStatus::Received { size };
                 }

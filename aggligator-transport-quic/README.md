@@ -1,0 +1,29 @@
+# Aggligator transport: QUIC
+
+[![crates.io page](https://img.shields.io/crates/v/aggligator-transport-quic)](https://crates.io/crates/aggligator-transport-quic)
+[![docs.rs page](https://docs.rs/aggligator-transport-quic/badge.svg)](https://docs.rs/aggligator-transport-quic)
+[![Apache 2.0 license](https://img.shields.io/crates/l/aggligator-transport-quic)](https://raw.githubusercontent.com/remoc-rs/aggligator/master/LICENSE)
+
+This crate provides QUIC transport for the [Aggligator link aggregator].
+
+Each link is a separate QUIC connection, established from each local network interface
+to each IP address of the server, like the TCP transport.
+All links are encrypted using TLS 1.3.
+
+QUIC performs its congestion control in user space. Using the BBR congestion controller
+can greatly improve throughput on links with packet loss, such as cellular or Wi-Fi links,
+at the cost of higher CPU usage than TCP.
+
+[Aggligator link aggregator]: https://crates.io/crates/aggligator
+
+## License
+
+Aggligator is licensed under the [Apache 2.0 license].
+
+[Apache 2.0 license]: https://github.com/remoc-rs/aggligator/blob/master/LICENSE
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in Aggligator by you, shall be licensed as Apache 2.0, without any
+additional terms or conditions.

@@ -9,11 +9,14 @@
 //! Aggligator command line utilities.
 
 use anyhow::{Context, bail};
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 use aggligator::cfg::Cfg;
+use aggligator_transport_quic::quinn::{self, congestion};
 use aggligator_transport_tcp::TcpLinkFilter;
+
+pub mod tls;
 
 /// Initializes logging for command line utilities.
 pub fn init_log() {
@@ -45,6 +48,45 @@ pub fn parse_tcp_link_filter(s: &str) -> anyhow::Result<TcpLinkFilter> {
         "interface-interface" => Ok(TcpLinkFilter::InterfaceInterface),
         "interface-ip" => Ok(TcpLinkFilter::InterfaceIp),
         other => bail!("unknown TCP link filter: {other}"),
+    }
+}
+
+/// QUIC congestion control algorithm.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum QuicCongestion {
+    /// CUBIC.
+    #[default]
+    Cubic,
+    /// BBR.
+    Bbr,
+    /// NewReno.
+    NewReno,
+}
+
+impl QuicCongestion {
+    /// QUIC transport configuration using this congestion control algorithm.
+    pub fn transport_config(self) -> quinn::TransportConfig {
+        let mut cfg = aggligator_transport_quic::transport_config();
+        match self {
+            Self::Cubic => cfg.congestion_controller_factory(Arc::new(congestion::CubicConfig::default())),
+            Self::Bbr => cfg.congestion_controller_factory(Arc::new(congestion::BbrConfig::default())),
+            Self::NewReno => cfg.congestion_controller_factory(Arc::new(congestion::NewRenoConfig::default())),
+        };
+        cfg
+    }
+
+    /// QUIC client configuration using the specified TLS configuration and this congestion control algorithm.
+    pub fn client_config(self, tls: rustls::ClientConfig) -> anyhow::Result<quinn::ClientConfig> {
+        let mut cfg = aggligator_transport_quic::client_config(tls)?;
+        cfg.transport_config(Arc::new(self.transport_config()));
+        Ok(cfg)
+    }
+
+    /// QUIC server configuration using the specified TLS configuration and this congestion control algorithm.
+    pub fn server_config(self, tls: rustls::ServerConfig) -> anyhow::Result<quinn::ServerConfig> {
+        let mut cfg = aggligator_transport_quic::server_config(tls)?;
+        cfg.transport_config(Arc::new(self.transport_config()));
+        Ok(cfg)
     }
 }
 

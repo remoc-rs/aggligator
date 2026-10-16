@@ -30,9 +30,14 @@ use aggligator::{
     transport::{AcceptorBuilder, ConnectingTransport, ConnectorBuilder, LinkTagBox},
 };
 use aggligator_monitor::monitor::{interactive_monitor, watch_tags};
+use aggligator_transport_quic::{QuicAcceptor, QuicConnector};
 use aggligator_transport_socks::{Socks5Connector, Socks5Target};
 use aggligator_transport_tcp::{IpVersion, TcpAcceptor, TcpConnector, TcpLinkFilter};
-use aggligator_util::{init_log, load_cfg, parse_tcp_link_filter, print_default_cfg, wait_sigterm};
+use aggligator_util::{
+    QuicCongestion, init_log, load_cfg, parse_tcp_link_filter, print_default_cfg,
+    tls::{self, BUILTIN_SERVER_NAME, builtin_server_config, insecure_client_config},
+    wait_sigterm,
+};
 
 #[cfg(feature = "bluer")]
 use aggligator_transport_bluer::rfcomm::{RfcommAcceptor, RfcommConnector};
@@ -41,6 +46,7 @@ use aggligator_transport_bluer::rfcomm::{RfcommAcceptor, RfcommConnector};
 use aggligator_transport_usb::{upc, usb_gadget};
 
 const TCP_PORT: u16 = 5800;
+const QUIC_PORT: u16 = 5800;
 const FLUSH_DELAY: Option<Duration> = Some(Duration::from_millis(10));
 const DUMP_BUFFER: usize = 8192;
 
@@ -160,6 +166,30 @@ pub struct ClientCli {
     /// interface-ip: one link for each pair of local interface and remote IP address.
     #[arg(long, value_parser = parse_tcp_link_filter, default_value = "interface-interface")]
     tcp_link_filter: TcpLinkFilter,
+    /// QUIC server name or IP addresses and port number.
+    ///
+    /// Links are encrypted using TLS.
+    /// The server is only authenticated if --quic-ca is specified.
+    #[arg(long)]
+    quic: Vec<String>,
+    /// PEM file containing the CA certificates for authenticating the QUIC server.
+    ///
+    /// The server certificate must be valid for the host name of the first QUIC target.
+    /// If unspecified, the server is not authenticated.
+    #[arg(long)]
+    quic_ca: Option<PathBuf>,
+    /// QUIC link filter.
+    ///
+    /// none: no link filtering.
+    ///
+    /// interface-interface: one link for each pair of local and remote interface.
+    ///
+    /// interface-ip: one link for each pair of local interface and remote IP address.
+    #[arg(long, value_parser = parse_tcp_link_filter, default_value = "interface-interface")]
+    quic_link_filter: TcpLinkFilter,
+    /// QUIC congestion control algorithm.
+    #[arg(long, value_enum, default_value_t)]
+    quic_congestion: QuicCongestion,
     /// SOCKS5 proxy server names or IP addresses, optionally with port numbers.
     ///
     /// One link is established through each proxy.
@@ -209,6 +239,32 @@ impl ClientCli {
                 }
                 Err(err) => {
                     eprintln!("cannot use TCP target: {err}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let quic_connector = if !self.quic.is_empty() {
+            let tls_cfg = match &self.quic_ca {
+                Some(ca) => tls::client_config_with_ca(ca).context("cannot load QUIC CA certificates")?,
+                None => insecure_client_config(),
+            };
+            let client_cfg = self.quic_congestion.client_config(tls_cfg)?;
+            match QuicConnector::new(self.quic.clone(), QUIC_PORT, client_cfg).await {
+                Ok(mut quic) => {
+                    if self.quic_ca.is_none() {
+                        quic.set_server_name(BUILTIN_SERVER_NAME);
+                    }
+                    quic.set_ip_version(IpVersion::from_only(self.ipv4, self.ipv6)?);
+                    quic.set_link_filter(self.quic_link_filter);
+                    targets.push(quic.to_string());
+                    watch_conn.push(Box::new(quic.clone()));
+                    Some(quic)
+                }
+                Err(err) => {
+                    eprintln!("cannot use QUIC target: {err}");
                     None
                 }
             }
@@ -329,6 +385,7 @@ impl ClientCli {
             let disabled_tags_rx = disabled_tags_rx.clone();
             let port_cfg = cfg.clone();
             let tcp_connector = tcp_connector.clone();
+            let quic_connector = quic_connector.clone();
             let socks_connector = socks_connector.clone();
             #[cfg(feature = "bluer")]
             let rfcomm_connector = rfcomm_connector.clone();
@@ -351,6 +408,9 @@ impl ClientCli {
 
                     let mut connector = builder.build();
                     if let Some(c) = tcp_connector.clone() {
+                        connector.add(c);
+                    }
+                    if let Some(c) = quic_connector.clone() {
                         connector.add(c);
                     }
                     if let Some(c) = socks_connector.clone() {
@@ -477,6 +537,20 @@ pub struct ServerCli {
     /// TCP port to listen on.
     #[arg(long)]
     tcp: Option<u16>,
+    /// QUIC (UDP) port to listen on.
+    #[arg(long)]
+    quic: Option<u16>,
+    /// PEM file containing the certificate chain of the QUIC server.
+    ///
+    /// If unspecified, a built-in self-signed certificate is used.
+    #[arg(long, requires = "quic_key")]
+    quic_cert: Option<PathBuf>,
+    /// PEM file containing the private key of the QUIC server.
+    #[arg(long, requires = "quic_cert")]
+    quic_key: Option<PathBuf>,
+    /// QUIC congestion control algorithm.
+    #[arg(long, value_enum, default_value_t)]
+    quic_congestion: QuicCongestion,
     /// RFCOMM channel number to listen on.
     #[cfg(feature = "bluer")]
     #[arg(long)]
@@ -529,6 +603,23 @@ impl ServerCli {
                     acceptor.add(tcp);
                 }
                 Err(err) => eprintln!("Cannot listen on TCP port {port}: {err}"),
+            }
+        }
+
+        if let Some(port) = self.quic {
+            let tls_cfg = match (&self.quic_cert, &self.quic_key) {
+                (Some(cert), Some(key)) => {
+                    tls::server_config(cert, key).context("cannot load QUIC certificate or key")?
+                }
+                _ => builtin_server_config(),
+            };
+            let server_cfg = self.quic_congestion.server_config(tls_cfg)?;
+            match QuicAcceptor::new([SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), port)], server_cfg).await {
+                Ok(quic) => {
+                    server_ports.push(format!("QUIC {quic}"));
+                    acceptor.add(quic);
+                }
+                Err(err) => eprintln!("Cannot listen on QUIC port {port}: {err}"),
             }
         }
 

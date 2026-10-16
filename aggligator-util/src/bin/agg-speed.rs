@@ -3,16 +3,12 @@
 use anyhow::{Context, Result, bail};
 use clap::{CommandFactory, Parser, Subcommand};
 use crossterm::{style::Stylize, tty::IsTty};
-use rustls::{
-    ClientConfig, DigitallySignedStruct, RootCertStore, ServerConfig, SignatureScheme,
-    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime},
-};
-use rustls_pemfile::{certs, private_key};
+use rustls::pki_types::ServerName;
 use serde::Serialize;
+use socket2::{Domain, Protocol, Socket, Type};
 use std::{
     collections::HashSet,
-    io::{BufReader, stdout},
+    io::stdout,
     net::{Ipv6Addr, SocketAddr},
     path::PathBuf,
     process::exit,
@@ -34,10 +30,17 @@ use aggligator_monitor::{
     monitor::{format_speed, interactive_monitor},
     speed::{INTERVAL, speed_test},
 };
+use aggligator_transport_quic::{QuicAcceptor, QuicConnector};
 use aggligator_transport_socks::{Socks5Connector, Socks5Target};
-use aggligator_transport_tcp::{IpVersion, TcpAcceptor, TcpConnector, TcpLinkFilter};
+use aggligator_transport_tcp::{
+    DEFAULT_NOTSENT_LOWAT, IpVersion, TcpAcceptor, TcpConnector, TcpLinkFilter, util::set_notsent_lowat,
+};
 use aggligator_transport_websocket::{WebSocketAcceptor, WebSocketConnector};
-use aggligator_util::{init_log, load_cfg, parse_tcp_link_filter, print_default_cfg, wait_sigterm};
+use aggligator_util::{
+    QuicCongestion, init_log, load_cfg, parse_tcp_link_filter, print_default_cfg,
+    tls::{BUILTIN_SERVER_NAME, builtin_server_config, insecure_client_config},
+    wait_sigterm,
+};
 use aggligator_wrapper_tls::{TlsClient, TlsServer};
 
 #[cfg(feature = "bluer")]
@@ -49,6 +52,7 @@ use aggligator_transport_bluer::rfcomm_profile::{RfcommProfileAcceptor, RfcommPr
 use aggligator_transport_usb::{upc, usb_gadget};
 
 const TCP_PORT: u16 = 5700;
+const QUIC_PORT: u16 = 5700;
 const DUMP_BUFFER: usize = 8192;
 
 const WEBSOCKET_PORT: u16 = 8080;
@@ -74,78 +78,6 @@ const RFCOMM_CHANNEL: u8 = 20;
 #[cfg(feature = "bluer")]
 const RFCOMM_UUID: aggligator_transport_bluer::rfcomm_profile::Uuid =
     aggligator_transport_bluer::rfcomm_profile::Uuid::from_u128(0x7f95058c_c00e_44a9_9003_2ce90d60e2e7);
-
-static TLS_CERT_PEM: &[u8] = include_bytes!("agg-speed-cert.pem");
-static TLS_KEY_PEM: &[u8] = include_bytes!("agg-speed-key.pem");
-static TLS_SERVER_NAME: &str = "aggligator.rs";
-
-fn tls_cert() -> CertificateDer<'static> {
-    let mut reader = BufReader::new(TLS_CERT_PEM);
-    let mut certs = certs(&mut reader);
-    certs.next().unwrap().unwrap()
-}
-
-fn tls_key() -> PrivateKeyDer<'static> {
-    let mut reader = BufReader::new(TLS_KEY_PEM);
-    private_key(&mut reader).unwrap().unwrap()
-}
-
-/// Accepts every TLS server certificate.
-///
-/// For speed test only! Do not use in production code!
-#[derive(Debug)]
-struct TlsNullVerifier;
-
-impl ServerCertVerifier for TlsNullVerifier {
-    fn verify_server_cert(
-        &self, _end_entity: &CertificateDer<'_>, _intermediates: &[CertificateDer<'_>],
-        _server_name: &ServerName<'_>, _ocsp_response: &[u8], _now: UnixTime,
-    ) -> std::result::Result<ServerCertVerified, rustls::Error> {
-        Ok(ServerCertVerified::assertion())
-    }
-
-    fn verify_tls12_signature(
-        &self, _message: &[u8], _cert: &CertificateDer<'_>, _dss: &DigitallySignedStruct,
-    ) -> std::result::Result<HandshakeSignatureValid, rustls::Error> {
-        Ok(HandshakeSignatureValid::assertion())
-    }
-
-    fn verify_tls13_signature(
-        &self, _message: &[u8], _cert: &CertificateDer<'_>, _dss: &DigitallySignedStruct,
-    ) -> std::result::Result<HandshakeSignatureValid, rustls::Error> {
-        Ok(HandshakeSignatureValid::assertion())
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        vec![
-            SignatureScheme::RSA_PKCS1_SHA1,
-            SignatureScheme::ECDSA_SHA1_Legacy,
-            SignatureScheme::RSA_PKCS1_SHA256,
-            SignatureScheme::ECDSA_NISTP256_SHA256,
-            SignatureScheme::RSA_PKCS1_SHA384,
-            SignatureScheme::ECDSA_NISTP384_SHA384,
-            SignatureScheme::RSA_PKCS1_SHA512,
-            SignatureScheme::ECDSA_NISTP521_SHA512,
-            SignatureScheme::RSA_PSS_SHA256,
-            SignatureScheme::RSA_PSS_SHA384,
-            SignatureScheme::RSA_PSS_SHA512,
-            SignatureScheme::ED25519,
-            SignatureScheme::ED448,
-        ]
-    }
-}
-
-fn tls_client_config() -> ClientConfig {
-    let mut root_store = RootCertStore::empty();
-    root_store.add(tls_cert()).unwrap();
-    let mut cfg = ClientConfig::builder().with_root_certificates(root_store).with_no_client_auth();
-    cfg.dangerous().set_certificate_verifier(Arc::new(TlsNullVerifier));
-    cfg
-}
-
-fn tls_server_config() -> ServerConfig {
-    ServerConfig::builder().with_no_client_auth().with_single_cert(vec![tls_cert()], tls_key()).unwrap()
-}
 
 fn debug_warning() -> String {
     match cfg!(debug_assertions) {
@@ -268,6 +200,23 @@ pub struct ClientCli {
     /// interface-ip: one link for each pair of local interface and remote IP address.
     #[arg(long, value_parser = parse_tcp_link_filter, default_value = "interface-interface")]
     tcp_link_filter: TcpLinkFilter,
+    /// QUIC server name or IP addresses and port number.
+    ///
+    /// Links are encrypted using TLS, without authenticating the server.
+    #[arg(long)]
+    quic: Vec<String>,
+    /// QUIC link filter.
+    ///
+    /// none: no link filtering.
+    ///
+    /// interface-interface: one link for each pair of local and remote interface.
+    ///
+    /// interface-ip: one link for each pair of local interface and remote IP address.
+    #[arg(long, value_parser = parse_tcp_link_filter, default_value = "interface-interface")]
+    quic_link_filter: TcpLinkFilter,
+    /// QUIC congestion control algorithm.
+    #[arg(long, value_enum, default_value_t)]
+    quic_congestion: QuicCongestion,
     /// SOCKS5 proxy server names or IP addresses, optionally with port numbers.
     ///
     /// One link is established through each proxy.
@@ -323,8 +272,8 @@ impl ClientCli {
         }
         if self.tls {
             builder.wrap(TlsClient::new(
-                Arc::new(tls_client_config()),
-                ServerName::try_from(TLS_SERVER_NAME).unwrap(),
+                Arc::new(insecure_client_config()),
+                ServerName::try_from(BUILTIN_SERVER_NAME).unwrap(),
             ));
         }
 
@@ -339,6 +288,18 @@ impl ClientCli {
             tcp_connector.set_link_filter(self.tcp_link_filter);
             targets.push(tcp_connector.to_string());
             connector.add(tcp_connector);
+        }
+
+        if !self.quic.is_empty() {
+            let client_cfg = self.quic_congestion.client_config(insecure_client_config())?;
+            let mut quic_connector = QuicConnector::new(self.quic.clone(), QUIC_PORT, client_cfg)
+                .await
+                .context("cannot resolve QUIC target")?;
+            quic_connector.set_server_name(BUILTIN_SERVER_NAME);
+            quic_connector.set_ip_version(ip_version);
+            quic_connector.set_link_filter(self.quic_link_filter);
+            targets.push(quic_connector.to_string());
+            connector.add(quic_connector);
         }
 
         if !self.socks.is_empty() {
@@ -539,6 +500,23 @@ impl ClientCli {
     }
 }
 
+/// Creates the TCP listener for the WebSocket server.
+///
+/// Unsent data is limited, as recommended by [`WebSocketAcceptor`].
+fn websocket_listener(addr: SocketAddr) -> std::io::Result<std::net::TcpListener> {
+    let socket = Socket::new(Domain::for_address(addr), Type::STREAM, Some(Protocol::TCP))?;
+    if addr.is_ipv6() {
+        let _ = socket.set_only_v6(false);
+    }
+    #[cfg(not(windows))]
+    socket.set_reuse_address(true)?;
+    socket.bind(&addr.into())?;
+    socket.listen(1024)?;
+    socket.set_nonblocking(true)?;
+    let _ = set_notsent_lowat(&socket, DEFAULT_NOTSENT_LOWAT);
+    Ok(socket.into())
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct SpeedReport {
     data_limit: Option<usize>,
@@ -564,6 +542,12 @@ pub struct ServerCli {
     /// TCP port to listen on.
     #[arg(long, default_value_t = TCP_PORT)]
     tcp: u16,
+    /// QUIC (UDP) port to listen on.
+    #[arg(long, default_value_t = QUIC_PORT)]
+    quic: u16,
+    /// QUIC congestion control algorithm.
+    #[arg(long, value_enum, default_value_t)]
+    quic_congestion: QuicCongestion,
     /// RFCOMM channel number to listen on.
     #[cfg(feature = "bluer")]
     #[arg(long, default_value_t = RFCOMM_CHANNEL)]
@@ -592,7 +576,7 @@ impl ServerCli {
             });
         }
         if self.tls {
-            builder.wrap(TlsServer::new(Arc::new(tls_server_config())));
+            builder.wrap(TlsServer::new(Arc::new(builtin_server_config())));
         }
 
         let acceptor = builder.build();
@@ -609,6 +593,15 @@ impl ServerCli {
                 acceptor.add(tcp);
             }
             Err(err) => eprintln!("Cannot listen on TCP port {}: {err}", self.tcp),
+        }
+
+        let server_cfg = self.quic_congestion.server_config(builtin_server_config())?;
+        match QuicAcceptor::new([SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), self.quic)], server_cfg).await {
+            Ok(quic) => {
+                ports.push(format!("QUIC {quic}"));
+                acceptor.add(quic);
+            }
+            Err(err) => eprintln!("Cannot listen on QUIC port {}: {err}", self.quic),
         }
 
         #[cfg(feature = "bluer")]
@@ -684,10 +677,12 @@ impl ServerCli {
         ports.push(format!("WebSocket {}", self.websocket));
         let websocket_addr = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), self.websocket);
         tokio::spawn(async move {
-            if let Err(err) = axum_server::bind(websocket_addr)
-                .serve(router.into_make_service_with_connect_info::<SocketAddr>())
-                .await
-            {
+            let res = async {
+                axum_server::from_tcp(websocket_listener(websocket_addr)?)?
+                    .serve(router.into_make_service_with_connect_info::<SocketAddr>())
+                    .await
+            };
+            if let Err(err) = res.await {
                 eprintln!("Cannot listen on WebSocket {websocket_addr}: {err}");
             }
         });

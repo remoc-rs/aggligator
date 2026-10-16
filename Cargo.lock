@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-util"
-version = "0.21.1"
+version = "0.21.2"
 dependencies = [
  "aggligator",
  "aggligator-monitor",

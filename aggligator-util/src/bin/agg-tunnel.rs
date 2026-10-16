@@ -34,7 +34,7 @@ use aggligator_transport_quic::{QuicAcceptor, QuicConnector};
 use aggligator_transport_socks::{Socks5Connector, Socks5Target};
 use aggligator_transport_tcp::{IpVersion, TcpAcceptor, TcpConnector, TcpLinkFilter};
 use aggligator_util::{
-    QuicCongestion, init_log, load_cfg, parse_tcp_link_filter, print_default_cfg,
+    QuicCongestion, check_tcp_congestion, init_log, load_cfg, parse_tcp_link_filter, print_default_cfg,
     tls::{self, BUILTIN_SERVER_NAME, builtin_server_config, insecure_client_config},
     wait_sigterm,
 };
@@ -166,6 +166,13 @@ pub struct ClientCli {
     /// interface-ip: one link for each pair of local interface and remote IP address.
     #[arg(long, value_parser = parse_tcp_link_filter, default_value = "interface-interface")]
     tcp_link_filter: TcpLinkFilter,
+    /// TCP congestion control algorithm of TCP links, for example bbr.
+    ///
+    /// Only supported on Linux, Android and FreeBSD and the algorithm must be available
+    /// in the kernel.
+    /// If unspecified, the system default is used.
+    #[arg(long)]
+    tcp_congestion: Option<String>,
     /// QUIC server name or IP addresses and port number.
     ///
     /// Links are encrypted using TLS.
@@ -219,6 +226,10 @@ pub struct ClientCli {
 
 impl ClientCli {
     async fn run(self, cfg: Cfg, dump: Option<PathBuf>) -> Result<()> {
+        if let Some(algorithm) = &self.tcp_congestion {
+            check_tcp_congestion(algorithm)?;
+        }
+
         let no_monitor = self.no_monitor || !stdout().is_tty();
         let once = self.once;
 
@@ -233,6 +244,7 @@ impl ClientCli {
                 Ok(mut tcp) => {
                     tcp.set_ip_version(IpVersion::from_only(self.ipv4, self.ipv6)?);
                     tcp.set_link_filter(self.tcp_link_filter);
+                    tcp.set_congestion_control(self.tcp_congestion.clone());
                     targets.push(tcp.to_string());
                     watch_conn.push(Box::new(tcp.clone()));
                     Some(tcp)
@@ -537,6 +549,13 @@ pub struct ServerCli {
     /// TCP port to listen on.
     #[arg(long)]
     tcp: Option<u16>,
+    /// TCP congestion control algorithm of TCP links, for example bbr.
+    ///
+    /// Only supported on Linux, Android and FreeBSD and the algorithm must be available
+    /// in the kernel.
+    /// If unspecified, the system default is used.
+    #[arg(long)]
+    tcp_congestion: Option<String>,
     /// QUIC (UDP) port to listen on.
     #[arg(long)]
     quic: Option<u16>,
@@ -567,6 +586,10 @@ pub struct ServerCli {
 
 impl ServerCli {
     async fn run(self, cfg: Cfg, dump: Option<PathBuf>) -> Result<()> {
+        if let Some(algorithm) = &self.tcp_congestion {
+            check_tcp_congestion(algorithm)?;
+        }
+
         let no_monitor = self.no_monitor || !stdout().is_tty();
 
         let ports: Arc<HashMap<_, _>> = Arc::new(
@@ -598,7 +621,8 @@ impl ServerCli {
 
         if let Some(port) = self.tcp {
             match TcpAcceptor::new([SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), port)]).await {
-                Ok(tcp) => {
+                Ok(mut tcp) => {
+                    tcp.set_congestion_control(self.tcp_congestion.clone());
                     server_ports.push(format!("TCP {tcp}"));
                     acceptor.add(tcp);
                 }

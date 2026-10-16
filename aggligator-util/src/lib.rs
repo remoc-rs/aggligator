@@ -51,6 +51,16 @@ pub fn parse_tcp_link_filter(s: &str) -> anyhow::Result<TcpLinkFilter> {
     }
 }
 
+/// Checks that the TCP congestion control algorithm can be used.
+///
+/// This is done by setting it on a newly created TCP socket.
+pub fn check_tcp_congestion(algorithm: &str) -> anyhow::Result<()> {
+    let socket =
+        socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, Some(socket2::Protocol::TCP))?;
+    aggligator_transport_tcp::util::set_congestion_control(&socket, algorithm)
+        .with_context(|| format!("cannot use TCP congestion control algorithm {algorithm}"))
+}
+
 /// QUIC congestion control algorithm.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum QuicCongestion {

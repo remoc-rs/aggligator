@@ -28,7 +28,7 @@ tokio = { workspace = true, features = ["net"] }
 network-interface = "2"
 socket2 = { version = "0.6.0", features = ["all"] }
 
-[target.'cfg(target_vendor = "apple")'.dependencies]
+[target.'cfg(any(target_os = "android", target_vendor = "apple"))'.dependencies]
 libc = "0.2"
 
 [dev-dependencies]

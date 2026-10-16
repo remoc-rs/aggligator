@@ -220,6 +220,7 @@ pub struct TcpConnector {
     socket_setup: SocketSetupFn,
     stream_setup: StreamSetupFn,
     notsent_lowat: Option<u32>,
+    congestion_control: Option<String>,
     link_disconnected: Arc<Notify>,
 }
 
@@ -232,6 +233,7 @@ impl fmt::Debug for TcpConnector {
             .field("link_filter", &self.link_filter)
             .field("multi_interface", &self.multi_interface)
             .field("notsent_lowat", &self.notsent_lowat)
+            .field("congestion_control", &self.congestion_control)
             .finish()
     }
 }
@@ -298,6 +300,7 @@ impl TcpConnector {
             socket_setup: Arc::new(|_, _| Ok(())),
             stream_setup: Arc::new(|_, _| Ok(())),
             notsent_lowat: Some(DEFAULT_NOTSENT_LOWAT),
+            congestion_control: None,
             link_disconnected: Arc::new(Notify::new()),
         })
     }
@@ -358,8 +361,9 @@ impl TcpConnector {
 
     /// Sets a function for configuring each stream after the connection has been established.
     ///
-    /// Use this for options such as TCP keepalive. `TCP_NODELAY` and `TCP_NOTSENT_LOWAT`
-    /// are set before the function is called and may be overridden by it.
+    /// Use this for options such as TCP keepalive. `TCP_NODELAY`, `TCP_NOTSENT_LOWAT` and
+    /// the congestion control algorithm are set before the function is called and may be
+    /// overridden by it.
     ///
     /// If the function returns an error, establishing that link fails.
     pub fn set_stream_setup(
@@ -378,6 +382,19 @@ impl TcpConnector {
     /// Only supported on Linux, Android and Apple platforms.
     pub fn set_notsent_lowat(&mut self, notsent_lowat: Option<u32>) {
         self.notsent_lowat = notsent_lowat;
+    }
+
+    /// Sets the TCP congestion control algorithm of the links, for example `bbr`.
+    ///
+    /// A congestion control algorithm that is not based on packet loss, such as BBR,
+    /// can greatly improve throughput over links with packet loss.
+    /// It only affects data sent by this side of the connection.
+    ///
+    /// If the algorithm cannot be set, a warning is logged and the system default is used.
+    /// The default is `None`, i.e. the system default.
+    /// See [`util::set_congestion_control`] for platform support.
+    pub fn set_congestion_control(&mut self, algorithm: Option<String>) {
+        self.congestion_control = algorithm;
     }
 
     /// Resolve target to socket addresses.
@@ -463,6 +480,7 @@ impl ConnectingTransport for TcpConnector {
         let stream = socket.connect(tag.remote).await?;
         let _ = stream.set_nodelay(true);
         util::configure_notsent_lowat(&stream, self.notsent_lowat);
+        util::configure_congestion_control(&stream, self.congestion_control.as_deref());
         (self.stream_setup)(&stream, tag)?;
 
         if let Local::Address(req_addr) = &tag.local {
@@ -532,6 +550,7 @@ pub struct TcpAcceptor {
     listeners: Vec<TcpListener>,
     stream_setup: StreamSetupFn,
     notsent_lowat: Option<u32>,
+    congestion_control: Option<String>,
 }
 
 impl fmt::Debug for TcpAcceptor {
@@ -539,6 +558,7 @@ impl fmt::Debug for TcpAcceptor {
         f.debug_struct("TcpAcceptor")
             .field("listeners", &self.listeners)
             .field("notsent_lowat", &self.notsent_lowat)
+            .field("congestion_control", &self.congestion_control)
             .finish()
     }
 }
@@ -594,6 +614,7 @@ impl TcpAcceptor {
             listeners: listeners.into_iter().collect(),
             stream_setup: Arc::new(|_, _| Ok(())),
             notsent_lowat: Some(DEFAULT_NOTSENT_LOWAT),
+            congestion_control: None,
         })
     }
 
@@ -659,8 +680,9 @@ impl TcpAcceptor {
 
     /// Sets a function for configuring each stream after the connection has been accepted.
     ///
-    /// Use this for options such as TCP keepalive. `TCP_NODELAY` and `TCP_NOTSENT_LOWAT`
-    /// are set before the function is called and may be overridden by it.
+    /// Use this for options such as TCP keepalive. `TCP_NODELAY`, `TCP_NOTSENT_LOWAT` and
+    /// the congestion control algorithm are set before the function is called and may be
+    /// overridden by it.
     ///
     /// If the function returns an error, the connection is rejected.
     pub fn set_stream_setup(
@@ -674,6 +696,13 @@ impl TcpAcceptor {
     /// See [`TcpConnector::set_notsent_lowat`] for details.
     pub fn set_notsent_lowat(&mut self, notsent_lowat: Option<u32>) {
         self.notsent_lowat = notsent_lowat;
+    }
+
+    /// Sets the TCP congestion control algorithm of the links, for example `bbr`.
+    ///
+    /// See [`TcpConnector::set_congestion_control`] for details.
+    pub fn set_congestion_control(&mut self, algorithm: Option<String>) {
+        self.congestion_control = algorithm;
     }
 }
 
@@ -710,6 +739,7 @@ impl AcceptingTransport for TcpAcceptor {
             // Configure socket.
             let _ = socket.set_nodelay(true);
             util::configure_notsent_lowat(&socket, self.notsent_lowat);
+            util::configure_congestion_control(&socket, self.congestion_control.as_deref());
             if let Err(err) = (self.stream_setup)(&socket, &tag) {
                 tracing::warn!(%remote, %err, "Configuring incoming connection failed, rejecting.");
                 continue;

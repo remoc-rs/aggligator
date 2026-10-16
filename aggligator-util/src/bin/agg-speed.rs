@@ -33,11 +33,12 @@ use aggligator_monitor::{
 use aggligator_transport_quic::{QuicAcceptor, QuicConnector};
 use aggligator_transport_socks::{Socks5Connector, Socks5Target};
 use aggligator_transport_tcp::{
-    DEFAULT_NOTSENT_LOWAT, IpVersion, TcpAcceptor, TcpConnector, TcpLinkFilter, util::set_notsent_lowat,
+    DEFAULT_NOTSENT_LOWAT, IpVersion, TcpAcceptor, TcpConnector, TcpLinkFilter,
+    util::{set_congestion_control, set_notsent_lowat},
 };
 use aggligator_transport_websocket::{WebSocketAcceptor, WebSocketConnector};
 use aggligator_util::{
-    QuicCongestion, init_log, load_cfg, parse_tcp_link_filter, print_default_cfg,
+    QuicCongestion, check_tcp_congestion, init_log, load_cfg, parse_tcp_link_filter, print_default_cfg,
     tls::{BUILTIN_SERVER_NAME, builtin_server_config, insecure_client_config},
     wait_sigterm,
 };
@@ -200,6 +201,13 @@ pub struct ClientCli {
     /// interface-ip: one link for each pair of local interface and remote IP address.
     #[arg(long, value_parser = parse_tcp_link_filter, default_value = "interface-interface")]
     tcp_link_filter: TcpLinkFilter,
+    /// TCP congestion control algorithm of TCP and WebSocket links, for example bbr.
+    ///
+    /// Only supported on Linux, Android and FreeBSD and the algorithm must be available
+    /// in the kernel.
+    /// If unspecified, the system default is used.
+    #[arg(long)]
+    tcp_congestion: Option<String>,
     /// QUIC server name or IP addresses and port number.
     ///
     /// Links are encrypted using TLS, without authenticating the server.
@@ -260,6 +268,10 @@ fn parse_rfcomm(arg: &str) -> Result<aggligator_transport_bluer::rfcomm::SocketA
 
 impl ClientCli {
     pub async fn run(mut self, cfg: Cfg, dump: Option<PathBuf>) -> Result<()> {
+        if let Some(algorithm) = &self.tcp_congestion {
+            check_tcp_congestion(algorithm)?;
+        }
+
         if !stdout().is_tty() {
             self.no_monitor = true;
         }
@@ -286,6 +298,7 @@ impl ClientCli {
                 TcpConnector::new(self.tcp.clone(), TCP_PORT).await.context("cannot resolve TCP target")?;
             tcp_connector.set_ip_version(ip_version);
             tcp_connector.set_link_filter(self.tcp_link_filter);
+            tcp_connector.set_congestion_control(self.tcp_congestion.clone());
             targets.push(tcp_connector.to_string());
             connector.add(tcp_connector);
         }
@@ -366,6 +379,7 @@ impl ClientCli {
             let mut ws_connector =
                 WebSocketConnector::new(websockets).await.context("cannot resolve WebSocket target")?;
             ws_connector.set_ip_version(ip_version);
+            ws_connector.set_congestion_control(self.tcp_congestion.clone());
             targets.push(ws_connector.to_string());
             connector.add(ws_connector);
         }
@@ -503,7 +517,9 @@ impl ClientCli {
 /// Creates the TCP listener for the WebSocket server.
 ///
 /// Unsent data is limited, as recommended by [`WebSocketAcceptor`].
-fn websocket_listener(addr: SocketAddr) -> std::io::Result<std::net::TcpListener> {
+fn websocket_listener(
+    addr: SocketAddr, congestion_control: Option<&str>,
+) -> std::io::Result<std::net::TcpListener> {
     let socket = Socket::new(Domain::for_address(addr), Type::STREAM, Some(Protocol::TCP))?;
     if addr.is_ipv6() {
         let _ = socket.set_only_v6(false);
@@ -514,6 +530,11 @@ fn websocket_listener(addr: SocketAddr) -> std::io::Result<std::net::TcpListener
     socket.listen(1024)?;
     socket.set_nonblocking(true)?;
     let _ = set_notsent_lowat(&socket, DEFAULT_NOTSENT_LOWAT);
+    if let Some(algorithm) = congestion_control
+        && let Err(err) = set_congestion_control(&socket, algorithm)
+    {
+        eprintln!("Cannot set TCP congestion control algorithm {algorithm} for WebSocket: {err}");
+    }
     Ok(socket.into())
 }
 
@@ -542,6 +563,13 @@ pub struct ServerCli {
     /// TCP port to listen on.
     #[arg(long, default_value_t = TCP_PORT)]
     tcp: u16,
+    /// TCP congestion control algorithm of TCP and WebSocket links, for example bbr.
+    ///
+    /// Only supported on Linux, Android and FreeBSD and the algorithm must be available
+    /// in the kernel.
+    /// If unspecified, the system default is used.
+    #[arg(long)]
+    tcp_congestion: Option<String>,
     /// QUIC (UDP) port to listen on.
     #[arg(long, default_value_t = QUIC_PORT)]
     quic: u16,
@@ -563,6 +591,10 @@ pub struct ServerCli {
 
 impl ServerCli {
     pub async fn run(mut self, cfg: Cfg, dump: Option<PathBuf>) -> Result<()> {
+        if let Some(algorithm) = &self.tcp_congestion {
+            check_tcp_congestion(algorithm)?;
+        }
+
         if !stdout().is_tty() {
             self.no_monitor = true;
         }
@@ -588,7 +620,8 @@ impl ServerCli {
             TcpAcceptor::new([SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), self.tcp)]).await
         };
         match tcp_acceptor_res {
-            Ok(tcp) => {
+            Ok(mut tcp) => {
+                tcp.set_congestion_control(self.tcp_congestion.clone());
                 ports.push(format!("TCP {tcp}"));
                 acceptor.add(tcp);
             }
@@ -676,9 +709,10 @@ impl ServerCli {
         acceptor.add(wsa);
         ports.push(format!("WebSocket {}", self.websocket));
         let websocket_addr = SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), self.websocket);
+        let tcp_congestion = self.tcp_congestion.clone();
         tokio::spawn(async move {
             let res = async {
-                axum_server::from_tcp(websocket_listener(websocket_addr)?)?
+                axum_server::from_tcp(websocket_listener(websocket_addr, tcp_congestion.as_deref())?)?
                     .serve(router.into_make_service_with_connect_info::<SocketAddr>())
                     .await
             };

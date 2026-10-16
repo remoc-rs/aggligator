@@ -149,13 +149,80 @@ pub fn set_notsent_lowat(socket: &impl std::os::windows::io::AsSocket, notsent_l
     Err(Error::new(std::io::ErrorKind::Unsupported, "TCP_NOTSENT_LOWAT is not supported"))
 }
 
-/// Sets `TCP_NOTSENT_LOWAT` on a link stream, if configured, logging failures.
-pub(crate) fn configure_notsent_lowat(stream: &tokio::net::TcpStream, notsent_lowat: Option<u32>) {
+/// Sets `TCP_NOTSENT_LOWAT` on a link stream, if configured.
+///
+/// Failures are logged, except on platforms that do not support it.
+/// See [`set_notsent_lowat`] for details.
+pub fn configure_notsent_lowat(stream: &tokio::net::TcpStream, notsent_lowat: Option<u32>) {
     if let Some(notsent_lowat) = notsent_lowat
         && let Err(err) = set_notsent_lowat(stream, notsent_lowat)
         && err.kind() != std::io::ErrorKind::Unsupported
     {
         tracing::debug!(%err, "cannot set TCP_NOTSENT_LOWAT");
+    }
+}
+
+/// Sets the congestion control algorithm of a TCP socket (`TCP_CONGESTION`), for example `bbr`.
+///
+/// When set on a listening socket, accepted sockets inherit the setting.
+///
+/// Only supported on Linux, Android and FreeBSD. The algorithm must be available in the kernel;
+/// on Linux, unprivileged processes can only use algorithms whose kernel module is loaded,
+/// such as `tcp_bbr` for `bbr`. Standard Android kernels only provide `cubic` and `reno`.
+/// On other platforms an error of kind [`Unsupported`](std::io::ErrorKind::Unsupported)
+/// is returned.
+#[cfg(unix)]
+pub fn set_congestion_control(socket: &impl std::os::fd::AsFd, algorithm: &str) -> Result<()> {
+    #[cfg(any(target_os = "freebsd", target_os = "linux"))]
+    {
+        socket2::SockRef::from(socket).set_tcp_congestion(algorithm.as_bytes())
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        use std::os::fd::AsRawFd;
+
+        let res = unsafe {
+            libc::setsockopt(
+                socket.as_fd().as_raw_fd(),
+                libc::IPPROTO_TCP,
+                libc::TCP_CONGESTION,
+                algorithm.as_ptr().cast(),
+                algorithm.len() as libc::socklen_t,
+            )
+        };
+        if res == -1 {
+            return Err(Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "freebsd", target_os = "linux")))]
+    {
+        let _ = (socket, algorithm);
+        Err(Error::new(std::io::ErrorKind::Unsupported, "setting TCP congestion control is not supported"))
+    }
+}
+
+/// Sets the congestion control algorithm of a TCP socket (`TCP_CONGESTION`).
+///
+/// Not supported on Windows, thus an error of kind
+/// [`Unsupported`](std::io::ErrorKind::Unsupported) is always returned.
+#[cfg(windows)]
+pub fn set_congestion_control(socket: &impl std::os::windows::io::AsSocket, algorithm: &str) -> Result<()> {
+    let _ = (socket, algorithm);
+    Err(Error::new(std::io::ErrorKind::Unsupported, "setting TCP congestion control is not supported"))
+}
+
+/// Sets the congestion control algorithm of a link stream, if configured.
+///
+/// Failures are logged as warnings and the system default is used.
+/// See [`set_congestion_control`] for details.
+pub fn configure_congestion_control(stream: &tokio::net::TcpStream, algorithm: Option<&str>) {
+    if let Some(algorithm) = algorithm
+        && let Err(err) = set_congestion_control(stream, algorithm)
+    {
+        tracing::warn!(%err, %algorithm, "cannot set TCP congestion control algorithm, using system default");
     }
 }
 

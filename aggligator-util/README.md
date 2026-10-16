@@ -12,6 +12,22 @@ The following command line tools are included:
 
 Both tools display a text-based, interactive connection and link monitor.
 
+Links can be established using the following transports:
+
+  * TCP,
+  * QUIC, always encrypted using TLS,
+  * WebSocket (`agg-speed` only),
+  * SOCKS5 proxies,
+  * Bluetooth RFCOMM and USB, see [features](#features).
+
+On links with packet loss, such as cellular or Wi-Fi links, a congestion control
+algorithm that is not based on packet loss can greatly improve throughput.
+Use `--quic-congestion bbr` for QUIC links and, on Linux, `--tcp-congestion bbr`
+for TCP and WebSocket links. The latter requires the `tcp_bbr` kernel module to be loaded.
+
+Compressible data can be compressed on all TCP, QUIC and SOCKS5 links using zstd
+by specifying `--compress` on both ends.
+
 [Aggligator link aggregator]: https://crates.io/crates/aggligator
 [`agg-speed`]: ../docs/agg-speed.md
 [`agg-tunnel`]: ../docs/agg-tunnel.md

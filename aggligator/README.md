@@ -75,9 +75,11 @@ The following [crates provide transports]:
 [aggligator-transport-websocket-web]: https://crates.io/crates/aggligator-transport-websocket-web
 
 The following crates provide transport wrappers:
-  * [aggligator-wrapper-tls] — transport wrapper providing TLS security.
+  * [aggligator-wrapper-tls] — transport wrapper providing TLS security,
+  * [aggligator-wrapper-zstd] — transport wrapper providing zstd compression.
 
 [aggligator-wrapper-tls]: https://crates.io/crates/aggligator-wrapper-tls
+[aggligator-wrapper-zstd]: https://crates.io/crates/aggligator-wrapper-zstd
 
 The following crates provide utility functions and command line tools:
   * [aggligator-monitor] — interactive text-based link monitor and speed test,

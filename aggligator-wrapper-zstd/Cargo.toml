@@ -1,0 +1,31 @@
+[package]
+name = "aggligator-wrapper-zstd"
+version = "0.1.0"
+description = "Aggligator transport wrapper: zstd compression"
+categories = ["asynchronous", "network-programming", "compression"]
+keywords = ["aggligator-transport", "zstd", "compression"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+aggligator = { version = "0.12.0", path = "../aggligator" }
+
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["io-util"] }
+
+async-compression = { version = "0.4.50", features = ["tokio", "zstd"] }
+
+[dev-dependencies]
+bytes = { workspace = true }
+futures = { workspace = true }
+aggligator-transport-tcp = { version = "0.6.0", path = "../aggligator-transport-tcp", default-features = false }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "time"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

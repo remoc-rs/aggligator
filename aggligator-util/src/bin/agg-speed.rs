@@ -43,6 +43,7 @@ use aggligator_util::{
     wait_sigterm,
 };
 use aggligator_wrapper_tls::{TlsClient, TlsServer};
+use aggligator_wrapper_zstd::Zstd;
 
 #[cfg(feature = "bluer")]
 use aggligator_transport_bluer::rfcomm::{RfcommAcceptor, RfcommConnector};
@@ -189,6 +190,12 @@ pub struct ClientCli {
     /// Warning: no server authentication is performed!
     #[arg(long)]
     tls: bool,
+    /// Compress all links using zstd with the specified level (default 1).
+    ///
+    /// Must be enabled on both ends. Not supported by WebSocket, USB and Bluetooth links.
+    /// The speed test data is random and thus not compressible.
+    #[arg(long, value_name = "LEVEL", num_args = 0..=1, default_missing_value = "1", allow_negative_numbers = true)]
+    compress: Option<i32>,
     /// TCP server name or IP addresses and port number.
     #[arg(long)]
     tcp: Vec<String>,
@@ -287,6 +294,9 @@ impl ClientCli {
                 Arc::new(insecure_client_config()),
                 ServerName::try_from(BUILTIN_SERVER_NAME).unwrap(),
             ));
+        }
+        if let Some(level) = self.compress {
+            builder.wrap(Zstd::with_level(level));
         }
 
         let mut connector = builder.build();
@@ -560,6 +570,12 @@ pub struct ServerCli {
     /// Encrypt all links using TLS.
     #[arg(long)]
     tls: bool,
+    /// Compress all links using zstd with the specified level (default 1).
+    ///
+    /// Must be enabled on both ends. Not supported by WebSocket, USB and Bluetooth links.
+    /// The speed test data is random and thus not compressible.
+    #[arg(long, value_name = "LEVEL", num_args = 0..=1, default_missing_value = "1", allow_negative_numbers = true)]
+    compress: Option<i32>,
     /// TCP port to listen on.
     #[arg(long, default_value_t = TCP_PORT)]
     tcp: u16,
@@ -609,6 +625,9 @@ impl ServerCli {
         }
         if self.tls {
             builder.wrap(TlsServer::new(Arc::new(builtin_server_config())));
+        }
+        if let Some(level) = self.compress {
+            builder.wrap(Zstd::with_level(level));
         }
 
         let acceptor = builder.build();

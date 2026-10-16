@@ -70,12 +70,10 @@ Raw speed test client
 
 * `-j`, `--json` — Output speed report in JSON format
 
-  Possible values: `true`, `false`
+   Warning: no server authentication is performed!
+* `--compress <LEVEL>` — Compress all links using zstd with the specified level (default 1).
 
-* `--tls` — Encrypt all links using TLS, without authenticating server
-
-  Possible values: `true`, `false`
-
+   Must be enabled on both ends. Not supported by WebSocket, USB and Bluetooth links. The speed test data is random and thus not compressible.
 * `--tcp <TCP>` — TCP server name or IP addresses and port number
 * `--tcp-link-filter <TCP_LINK_FILTER>` — TCP link filter
 
@@ -105,9 +103,9 @@ Raw speed test server
   Possible values: `true`, `false`
 
 * `--tls` — Encrypt all links using TLS
+* `--compress <LEVEL>` — Compress all links using zstd with the specified level (default 1).
 
-  Possible values: `true`, `false`
-
+   Must be enabled on both ends. Not supported by WebSocket, USB and Bluetooth links. The speed test data is random and thus not compressible.
 * `--tcp <TCP>` — TCP port to listen on
 
   Default value: `5700`

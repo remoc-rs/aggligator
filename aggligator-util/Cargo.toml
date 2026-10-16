@@ -29,6 +29,7 @@ aggligator-transport-tcp = { version = "0.6.0", path = "../aggligator-transport-
 aggligator-transport-usb = { version = "0.10.0", path = "../aggligator-transport-usb", optional = true }
 aggligator-transport-websocket = { version = "0.10.0", path = "../aggligator-transport-websocket" }
 aggligator-wrapper-tls = { version = "0.5.0", path = "../aggligator-wrapper-tls" }
+aggligator-wrapper-zstd = { version = "0.1.0", path = "../aggligator-wrapper-zstd" }
 
 async-trait = { workspace = true }
 bytes = { workspace = true }

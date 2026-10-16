@@ -10,6 +10,7 @@ members = [
     "aggligator-transport-websocket",
     "aggligator-util",
     "aggligator-wrapper-tls",
+    "aggligator-wrapper-zstd",
 ]
 exclude = ["aggligator-transport-websocket-web", "aggligator-transport-webusb"]
 resolver = "2"

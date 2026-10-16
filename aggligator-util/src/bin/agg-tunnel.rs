@@ -38,6 +38,7 @@ use aggligator_util::{
     tls::{self, BUILTIN_SERVER_NAME, builtin_server_config, insecure_client_config},
     wait_sigterm,
 };
+use aggligator_wrapper_zstd::Zstd;
 
 #[cfg(feature = "bluer")]
 use aggligator_transport_bluer::rfcomm::{RfcommAcceptor, RfcommConnector};
@@ -136,6 +137,12 @@ pub struct ClientCli {
     /// Do not display the link monitor.
     #[arg(long, short = 'n')]
     no_monitor: bool,
+    /// Compress all links using zstd with the specified level (default 1).
+    ///
+    /// Must be enabled on both ends. Not supported by WebSocket, USB and Bluetooth links.
+    /// Compression only helps if the transferred data is compressible.
+    #[arg(long, value_name = "LEVEL", num_args = 0..=1, default_missing_value = "1", allow_negative_numbers = true)]
+    compress: Option<i32>,
     /// Display all possible (including disconnected) links in the link monitor.
     #[arg(long, short = 'a')]
     all_links: bool,
@@ -232,6 +239,7 @@ impl ClientCli {
 
         let no_monitor = self.no_monitor || !stdout().is_tty();
         let once = self.once;
+        let compress = self.compress;
 
         let ports: Vec<_> =
             self.port.clone().into_iter().map(|(s, c)| if s == 0 { (c, c) } else { (s, c) }).collect();
@@ -417,6 +425,9 @@ impl ClientCli {
                         builder.task().dump(tx);
                         tokio::spawn(dump_to_json_line_file(dump, rx));
                     }
+                    if let Some(level) = compress {
+                        builder.wrap(Zstd::with_level(level));
+                    }
 
                     let mut connector = builder.build();
                     if let Some(c) = tcp_connector.clone() {
@@ -539,6 +550,12 @@ pub struct ServerCli {
     /// Do not display the link monitor.
     #[arg(long, short = 'n')]
     no_monitor: bool,
+    /// Compress all links using zstd with the specified level (default 1).
+    ///
+    /// Must be enabled on both ends. Not supported by WebSocket, USB and Bluetooth links.
+    /// Compression only helps if the transferred data is compressible.
+    #[arg(long, value_name = "LEVEL", num_args = 0..=1, default_missing_value = "1", allow_negative_numbers = true)]
+    compress: Option<i32>,
     /// Ports to forward to clients.
     ///
     /// Takes the form `port` or `target:port` and can be specified multiple times.
@@ -614,6 +631,9 @@ impl ServerCli {
                 task.dump(tx);
                 tokio::spawn(dump_to_json_line_file(dump.clone(), rx));
             });
+        }
+        if let Some(level) = self.compress {
+            builder.wrap(Zstd::with_level(level));
         }
 
         let acceptor = builder.build();

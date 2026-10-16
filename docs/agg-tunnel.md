@@ -47,9 +47,9 @@ Tunnel client
   Possible values: `true`, `false`
 
 * `-n`, `--no-monitor` — Do not display the link monitor
+* `--compress <LEVEL>` — Compress all links using zstd with the specified level (default 1).
 
-  Possible values: `true`, `false`
-
+   Must be enabled on both ends. Not supported by WebSocket, USB and Bluetooth links. Compression only helps if the transferred data is compressible.
 * `-a`, `--all-links` — Display all possible (including disconnected) links in the link monitor
 
   Possible values: `true`, `false`
@@ -79,6 +79,10 @@ Tunnel server
 ###### **Options:**
 
 * `-n`, `--no-monitor` — Do not display the link monitor
+* `--compress <LEVEL>` — Compress all links using zstd with the specified level (default 1).
+
+   Must be enabled on both ends. Not supported by WebSocket, USB and Bluetooth links. Compression only helps if the transferred data is compressible.
+* `-p`, `--port <PORT>` — Ports to forward to clients.
 
   Possible values: `true`, `false`
 

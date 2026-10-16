@@ -39,34 +39,67 @@ Tunnel client
 ###### **Options:**
 
 * `-4`, `--ipv4` — Use IPv4
-
-  Possible values: `true`, `false`
-
 * `-6`, `--ipv6` — Use IPv6
-
-  Possible values: `true`, `false`
-
 * `-n`, `--no-monitor` — Do not display the link monitor
 * `--compress <LEVEL>` — Compress all links using zstd with the specified level (default 1).
 
    Must be enabled on both ends. Not supported by WebSocket, USB and Bluetooth links. Compression only helps if the transferred data is compressible.
 * `-a`, `--all-links` — Display all possible (including disconnected) links in the link monitor
+* `-p`, `--port <PORT>` — Ports to forward from server to client.
 
-  Possible values: `true`, `false`
+   Takes the form `server_port:client_port` and can be specified multiple times.
 
-* `-p`, `--port <PORT>` — Ports to forward from server to client
-* `-g`, `--global` — Forward ports on all local interfaces
+   The port must have been enabled on the server.
+* `-g`, `--global` — Forward ports on all local interfaces.
 
-  Possible values: `true`, `false`
-
+   If unspecified only loopback connections are accepted.
 * `--once` — Exit after handling one connection
-
-  Possible values: `true`, `false`
-
 * `--tcp <TCP>` — TCP server name or IP addresses and port number
-* `--tcp-link-filter <TCP_LINK_FILTER>` — TCP link filter
+* `--tcp-link-filter <TCP_LINK_FILTER>` — TCP link filter.
+
+   none: no link filtering.
+
+   interface-interface: one link for each pair of local and remote interface.
+
+   interface-ip: one link for each pair of local interface and remote IP address.
 
   Default value: `interface-interface`
+* `--tcp-congestion <TCP_CONGESTION>` — TCP congestion control algorithm of TCP links, for example bbr.
+
+   Only supported on Linux, Android and FreeBSD and the algorithm must be available in the kernel. If unspecified, the system default is used.
+* `--quic <QUIC>` — QUIC server name or IP addresses and port number.
+
+   Links are encrypted using TLS. The server is only authenticated if --quic-ca is specified.
+* `--quic-ca <QUIC_CA>` — PEM file containing the CA certificates for authenticating the QUIC server.
+
+   The server certificate must be valid for the host name of the first QUIC target. If unspecified, the server is not authenticated.
+* `--quic-link-filter <QUIC_LINK_FILTER>` — QUIC link filter.
+
+   none: no link filtering.
+
+   interface-interface: one link for each pair of local and remote interface.
+
+   interface-ip: one link for each pair of local interface and remote IP address.
+
+  Default value: `interface-interface`
+* `--quic-congestion <QUIC_CONGESTION>` — QUIC congestion control algorithm
+
+  Default value: `cubic`
+
+  Possible values:
+  - `cubic`:
+    CUBIC
+  - `bbr`:
+    BBR
+  - `new-reno`:
+    NewReno
+
+* `--socks <SOCKS>` — SOCKS5 proxy server names or IP addresses, optionally with port numbers.
+
+   One link is established through each proxy. The default proxy port number is 1080.
+* `--socks-target <SOCKS_TARGET>` — Target server name or IP address reached through the SOCKS5 proxies.
+
+   Defaults to the first TCP target.
 
 
 
@@ -84,10 +117,30 @@ Tunnel server
    Must be enabled on both ends. Not supported by WebSocket, USB and Bluetooth links. Compression only helps if the transferred data is compressible.
 * `-p`, `--port <PORT>` — Ports to forward to clients.
 
-  Possible values: `true`, `false`
+   Takes the form `port` or `target:port` and can be specified multiple times.
 
-* `-p`, `--port <PORT>` — Ports to forward to clients
+   Target can be a host name or IP address. If unspecified localhost is used as target.
 * `--tcp <TCP>` — TCP port to listen on
+* `--tcp-congestion <TCP_CONGESTION>` — TCP congestion control algorithm of TCP links, for example bbr.
+
+   Only supported on Linux, Android and FreeBSD and the algorithm must be available in the kernel. If unspecified, the system default is used.
+* `--quic <QUIC>` — QUIC (UDP) port to listen on
+* `--quic-cert <QUIC_CERT>` — PEM file containing the certificate chain of the QUIC server.
+
+   If unspecified, a built-in self-signed certificate is used.
+* `--quic-key <QUIC_KEY>` — PEM file containing the private key of the QUIC server
+* `--quic-congestion <QUIC_CONGESTION>` — QUIC congestion control algorithm
+
+  Default value: `cubic`
+
+  Possible values:
+  - `cubic`:
+    CUBIC
+  - `bbr`:
+    BBR
+  - `new-reno`:
+    NewReno
+
 
 
 

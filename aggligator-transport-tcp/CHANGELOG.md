@@ -5,6 +5,16 @@ All notable changes to the Aggligator TCP transport will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.6.1 - 2026-10-16
+### Changed
+- limit unsent data in the socket send buffer (`TCP_NOTSENT_LOWAT`) to 128 KiB by default,
+  improving throughput of bidirectional transfers
+### Added
+- `set_notsent_lowat` on `TcpConnector` and `TcpAcceptor`
+- `util::set_notsent_lowat`, also usable on listening sockets
+- `set_congestion_control` on `TcpConnector` and `TcpAcceptor` for selecting the
+  TCP congestion control algorithm
+
 ## 0.6.0 - 2026-08-26
 ### Changed
 - **breaking:** `tcp_server` and `tls_server` have been replaced by `tcp_listen` and

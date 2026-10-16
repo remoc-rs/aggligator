@@ -7,8 +7,8 @@
 This crate provides command line tools for working with the [Aggligator link aggregator].
 
 The following command line tools are included:
-  * [`agg-speed`] — performs a speed test over a connection of aggregated TCP links,
-  * [`agg-tunnel`] — forwards arbitrary TCP ports over a connection of aggregated TCP links.
+  * [`agg-speed`] — performs a speed test over a connection of aggregated links,
+  * [`agg-tunnel`] — forwards arbitrary TCP ports over a connection of aggregated links.
 
 Both tools display a text-based, interactive connection and link monitor.
 

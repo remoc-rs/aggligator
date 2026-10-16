@@ -714,8 +714,10 @@ impl ServerCli {
                     let control = control.clone();
                     let mut term_rx = term_tx.subscribe();
                     async move {
-                        let _ = term_rx.recv().await;
-                        control.terminate();
+                        tokio::select! {
+                            _ = term_rx.recv() => control.terminate(),
+                            _ = control.terminated() => (),
+                        }
                     }
                 });
                 let _ = control_tx.send((control, String::new()));

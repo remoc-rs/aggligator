@@ -370,8 +370,10 @@ impl ClientCli {
                     tokio::spawn({
                         let control = control.clone();
                         async move {
-                            wait_sigterm().await;
-                            control.terminate();
+                            tokio::select! {
+                                () = wait_sigterm() => control.terminate(),
+                                _ = control.terminated() => (),
+                            }
                         }
                     });
 
@@ -383,13 +385,19 @@ impl ClientCli {
                         }
                     });
                     let mut disabled_tags_rx = disabled_tags_rx.clone();
+                    let tag_control = control.clone();
                     tokio::spawn(async move {
                         loop {
                             let disabled_tags: HashSet<LinkTagBox> =
                                 (*disabled_tags_rx.borrow_and_update()).clone();
                             connector.set_disabled_tags(disabled_tags);
-                            if disabled_tags_rx.changed().await.is_err() {
-                                break;
+                            tokio::select! {
+                                res = disabled_tags_rx.changed() => {
+                                    if res.is_err() {
+                                        break;
+                                    }
+                                }
+                                _ = tag_control.terminated() => break,
                             }
                         }
                     });
@@ -603,8 +611,10 @@ impl ServerCli {
                     let control = control.clone();
                     let mut term_rx = term_tx.subscribe();
                     async move {
-                        let _ = term_rx.recv().await;
-                        control.terminate();
+                        tokio::select! {
+                            _ = term_rx.recv() => control.terminate(),
+                            _ = control.terminated() => (),
+                        }
                     }
                 });
 

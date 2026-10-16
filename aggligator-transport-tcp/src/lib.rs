@@ -52,6 +52,13 @@ static NAME: &str = "tcp";
 /// Backlog of pending connections per listening socket.
 const LISTEN_BACKLOG: u32 = 64;
 
+/// Default limit of unsent data in the socket send buffer.
+///
+/// Without a limit, the operating system buffers up to several megabytes of unsent
+/// data per socket. This delays acknowledgements sent over the link and inflates
+/// the measured roundtrip time, which reduces throughput of the aggregated connection.
+pub const DEFAULT_NOTSENT_LOWAT: u32 = 131_072;
+
 /// IP protocol version.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum IpVersion {
@@ -212,6 +219,7 @@ pub struct TcpConnector {
     interface_filter: Arc<dyn Fn(&NetworkInterface) -> bool + Send + Sync>,
     socket_setup: SocketSetupFn,
     stream_setup: StreamSetupFn,
+    notsent_lowat: Option<u32>,
     link_disconnected: Arc<Notify>,
 }
 
@@ -223,6 +231,7 @@ impl fmt::Debug for TcpConnector {
             .field("resolve_interval", &self.resolve_interval)
             .field("link_filter", &self.link_filter)
             .field("multi_interface", &self.multi_interface)
+            .field("notsent_lowat", &self.notsent_lowat)
             .finish()
     }
 }
@@ -288,6 +297,7 @@ impl TcpConnector {
             interface_filter: Arc::new(|_| true),
             socket_setup: Arc::new(|_, _| Ok(())),
             stream_setup: Arc::new(|_, _| Ok(())),
+            notsent_lowat: Some(DEFAULT_NOTSENT_LOWAT),
             link_disconnected: Arc::new(Notify::new()),
         })
     }
@@ -348,14 +358,26 @@ impl TcpConnector {
 
     /// Sets a function for configuring each stream after the connection has been established.
     ///
-    /// Use this for options such as TCP keepalive. `TCP_NODELAY` is enabled before
-    /// the function is called and may be overridden by it.
+    /// Use this for options such as TCP keepalive. `TCP_NODELAY` and `TCP_NOTSENT_LOWAT`
+    /// are set before the function is called and may be overridden by it.
     ///
     /// If the function returns an error, establishing that link fails.
     pub fn set_stream_setup(
         &mut self, stream_setup: impl Fn(&TcpStream, &TcpLinkTag) -> Result<()> + Send + Sync + 'static,
     ) {
         self.stream_setup = Arc::new(stream_setup);
+    }
+
+    /// Sets the limit of unsent data in the socket send buffer (`TCP_NOTSENT_LOWAT`).
+    ///
+    /// Limiting unsent data avoids delaying acknowledgements of the aggregated connection
+    /// behind large amounts of buffered data, which otherwise reduces throughput,
+    /// especially when data is transferred in both directions.
+    ///
+    /// The default is [`DEFAULT_NOTSENT_LOWAT`]. `None` uses the operating system setting.
+    /// Only supported on Linux, Android and Apple platforms.
+    pub fn set_notsent_lowat(&mut self, notsent_lowat: Option<u32>) {
+        self.notsent_lowat = notsent_lowat;
     }
 
     /// Resolve target to socket addresses.
@@ -440,6 +462,7 @@ impl ConnectingTransport for TcpConnector {
 
         let stream = socket.connect(tag.remote).await?;
         let _ = stream.set_nodelay(true);
+        util::configure_notsent_lowat(&stream, self.notsent_lowat);
         (self.stream_setup)(&stream, tag)?;
 
         if let Local::Address(req_addr) = &tag.local {
@@ -508,11 +531,15 @@ impl ConnectingTransport for TcpConnector {
 pub struct TcpAcceptor {
     listeners: Vec<TcpListener>,
     stream_setup: StreamSetupFn,
+    notsent_lowat: Option<u32>,
 }
 
 impl fmt::Debug for TcpAcceptor {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("TcpAcceptor").field("listeners", &self.listeners).finish()
+        f.debug_struct("TcpAcceptor")
+            .field("listeners", &self.listeners)
+            .field("notsent_lowat", &self.notsent_lowat)
+            .finish()
     }
 }
 
@@ -563,7 +590,11 @@ impl TcpAcceptor {
             return Err(Error::new(ErrorKind::InvalidInput, "at least one listener is required"));
         }
 
-        Ok(Self { listeners: listeners.into_iter().collect(), stream_setup: Arc::new(|_, _| Ok(())) })
+        Ok(Self {
+            listeners: listeners.into_iter().collect(),
+            stream_setup: Arc::new(|_, _| Ok(())),
+            notsent_lowat: Some(DEFAULT_NOTSENT_LOWAT),
+        })
     }
 
     /// Create a new TCP transport for incoming connections, listening individually on all interfaces.
@@ -628,14 +659,21 @@ impl TcpAcceptor {
 
     /// Sets a function for configuring each stream after the connection has been accepted.
     ///
-    /// Use this for options such as TCP keepalive. `TCP_NODELAY` is enabled before
-    /// the function is called and may be overridden by it.
+    /// Use this for options such as TCP keepalive. `TCP_NODELAY` and `TCP_NOTSENT_LOWAT`
+    /// are set before the function is called and may be overridden by it.
     ///
     /// If the function returns an error, the connection is rejected.
     pub fn set_stream_setup(
         &mut self, stream_setup: impl Fn(&TcpStream, &TcpLinkTag) -> Result<()> + Send + Sync + 'static,
     ) {
         self.stream_setup = Arc::new(stream_setup);
+    }
+
+    /// Sets the limit of unsent data in the socket send buffer (`TCP_NOTSENT_LOWAT`).
+    ///
+    /// See [`TcpConnector::set_notsent_lowat`] for details.
+    pub fn set_notsent_lowat(&mut self, notsent_lowat: Option<u32>) {
+        self.notsent_lowat = notsent_lowat;
     }
 }
 
@@ -671,6 +709,7 @@ impl AcceptingTransport for TcpAcceptor {
 
             // Configure socket.
             let _ = socket.set_nodelay(true);
+            util::configure_notsent_lowat(&socket, self.notsent_lowat);
             if let Err(err) = (self.stream_setup)(&socket, &tag) {
                 tracing::warn!(%remote, %err, "Configuring incoming connection failed, rejecting.");
                 continue;

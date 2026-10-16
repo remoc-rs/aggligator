@@ -93,6 +93,72 @@ pub fn local_address_for_target(target: SocketAddr) -> Result<IpAddr> {
     Ok(local.ip().to_canonical())
 }
 
+/// Limits the amount of unsent data in the send buffer of a TCP socket (`TCP_NOTSENT_LOWAT`).
+///
+/// When set on a listening socket, accepted sockets inherit the setting.
+/// See [`TcpConnector::set_notsent_lowat`](crate::TcpConnector::set_notsent_lowat) for
+/// why this improves throughput of aggregated connections.
+///
+/// Only supported on Linux, Android and Apple platforms. On other platforms an error of kind
+/// [`Unsupported`](std::io::ErrorKind::Unsupported) is returned.
+#[cfg(unix)]
+pub fn set_notsent_lowat(socket: &impl std::os::fd::AsFd, notsent_lowat: u32) -> Result<()> {
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    {
+        socket2::SockRef::from(socket).set_tcp_notsent_lowat(notsent_lowat)
+    }
+
+    #[cfg(target_vendor = "apple")]
+    {
+        use std::os::fd::AsRawFd;
+
+        const TCP_NOTSENT_LOWAT: libc::c_int = 0x201;
+
+        let value = libc::c_int::try_from(notsent_lowat)
+            .map_err(|_| Error::new(std::io::ErrorKind::InvalidInput, "TCP_NOTSENT_LOWAT value too large"))?;
+
+        let res = unsafe {
+            libc::setsockopt(
+                socket.as_fd().as_raw_fd(),
+                libc::IPPROTO_TCP,
+                TCP_NOTSENT_LOWAT,
+                (&value as *const libc::c_int).cast(),
+                std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+            )
+        };
+        if res == -1 {
+            return Err(Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "linux", target_vendor = "apple")))]
+    {
+        let _ = (socket, notsent_lowat);
+        Err(Error::new(std::io::ErrorKind::Unsupported, "TCP_NOTSENT_LOWAT is not supported"))
+    }
+}
+
+/// Limits the amount of unsent data in the send buffer of a TCP socket (`TCP_NOTSENT_LOWAT`).
+///
+/// Not supported on Windows, thus an error of kind
+/// [`Unsupported`](std::io::ErrorKind::Unsupported) is always returned.
+#[cfg(windows)]
+pub fn set_notsent_lowat(socket: &impl std::os::windows::io::AsSocket, notsent_lowat: u32) -> Result<()> {
+    let _ = (socket, notsent_lowat);
+    Err(Error::new(std::io::ErrorKind::Unsupported, "TCP_NOTSENT_LOWAT is not supported"))
+}
+
+/// Sets `TCP_NOTSENT_LOWAT` on a link stream, if configured, logging failures.
+pub(crate) fn configure_notsent_lowat(stream: &tokio::net::TcpStream, notsent_lowat: Option<u32>) {
+    if let Some(notsent_lowat) = notsent_lowat
+        && let Err(err) = set_notsent_lowat(stream, notsent_lowat)
+        && err.kind() != std::io::ErrorKind::Unsupported
+    {
+        tracing::debug!(%err, "cannot set TCP_NOTSENT_LOWAT");
+    }
+}
+
 /// Binds the socket the the specifed network interface.
 pub fn bind_socket_to_interface(socket: &TcpSocket, interface: &[u8], remote: IpAddr) -> Result<()> {
     #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]

@@ -46,7 +46,7 @@ use aggligator::{
     transport::{AcceptedStreamBox, AcceptingTransport, ConnectingTransport, LinkTag, LinkTagBox},
 };
 use aggligator_transport_tcp::util::{self, NetworkInterface};
-pub use aggligator_transport_tcp::{IpVersion, Local};
+pub use aggligator_transport_tcp::{DEFAULT_NOTSENT_LOWAT, IpVersion, Local};
 
 static NAME: &str = "websocket";
 
@@ -125,6 +125,7 @@ pub struct WebSocketConnector {
     interface_filter: Arc<dyn Fn(&NetworkInterface) -> bool + Send + Sync>,
     socket_setup: SocketSetupFn,
     stream_setup: StreamSetupFn,
+    notsent_lowat: Option<u32>,
     link_disconnected: Arc<Notify>,
 }
 
@@ -136,6 +137,7 @@ impl fmt::Debug for WebSocketConnector {
             .field("resolve_interval", &self.resolve_interval)
             .field("web_socket_config", &self.web_socket_config)
             .field("multi_interface", &self.multi_interface)
+            .field("notsent_lowat", &self.notsent_lowat)
             .finish()
     }
 }
@@ -203,6 +205,7 @@ impl WebSocketConnector {
             interface_filter: Arc::new(|_| true),
             socket_setup: Arc::new(|_, _| Ok(())),
             stream_setup: Arc::new(|_, _| Ok(())),
+            notsent_lowat: Some(DEFAULT_NOTSENT_LOWAT),
             link_disconnected: Arc::new(Notify::new()),
         })
     }
@@ -272,8 +275,8 @@ impl WebSocketConnector {
     /// Sets a function for configuring each TCP stream after the connection has been
     /// established, but before the WebSocket handshake is performed.
     ///
-    /// Use this for options such as TCP keepalive. `TCP_NODELAY` is enabled before
-    /// the function is called and may be overridden by it.
+    /// Use this for options such as TCP keepalive. `TCP_NODELAY` and `TCP_NOTSENT_LOWAT`
+    /// are set before the function is called and may be overridden by it.
     ///
     /// If the function returns an error, establishing that link fails.
     pub fn set_stream_setup(
@@ -281,6 +284,18 @@ impl WebSocketConnector {
         stream_setup: impl Fn(&TcpStream, &OutgoingWebSocketLinkTag) -> Result<()> + Send + Sync + 'static,
     ) {
         self.stream_setup = Arc::new(stream_setup);
+    }
+
+    /// Sets the limit of unsent data in the TCP socket send buffer (`TCP_NOTSENT_LOWAT`).
+    ///
+    /// Limiting unsent data avoids delaying acknowledgements of the aggregated connection
+    /// behind large amounts of buffered data, which otherwise reduces throughput,
+    /// especially when data is transferred in both directions.
+    ///
+    /// The default is [`DEFAULT_NOTSENT_LOWAT`]. `None` uses the operating system setting.
+    /// Only supported on Linux, Android and Apple platforms.
+    pub fn set_notsent_lowat(&mut self, notsent_lowat: Option<u32>) {
+        self.notsent_lowat = notsent_lowat;
     }
 
     /// Resolve URLs to socket addresses.
@@ -387,6 +402,12 @@ impl ConnectingTransport for WebSocketConnector {
 
         let stream = socket.connect(tag.remote).await?;
         let _ = stream.set_nodelay(true);
+        if let Some(notsent_lowat) = self.notsent_lowat
+            && let Err(err) = util::set_notsent_lowat(&stream, notsent_lowat)
+            && err.kind() != ErrorKind::Unsupported
+        {
+            tracing::debug!(%err, "cannot set TCP_NOTSENT_LOWAT");
+        }
         (self.stream_setup)(&stream, tag)?;
 
         if let Local::Address(req_addr) = &tag.local {
@@ -604,6 +625,10 @@ impl WebSocketAcceptorBuilder {
 /// WebSocket transport for incoming connections.
 ///
 /// This transport is packet-based.
+///
+/// To avoid reduced throughput due to excessive buffering, it is recommended to limit
+/// the unsent data of the listening socket of the HTTP server to [`DEFAULT_NOTSENT_LOWAT`]
+/// using [`set_notsent_lowat`](aggligator_transport_tcp::util::set_notsent_lowat).
 #[derive(Debug)]
 pub struct WebSocketAcceptor {
     rx: Mutex<mpsc::Receiver<IncomingWebSocket>>,

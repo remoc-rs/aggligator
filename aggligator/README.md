@@ -124,8 +124,10 @@ install [`wasm-bindgen-test-runner`](https://github.com/wasm-bindgen/wasm-bindge
 [Google ChromeDriver](https://developer.chrome.com/docs/chromedriver/downloads).
 Then use the following command to execute the test suite:
 
-```
-WASM_BINDGEN_USE_BROWSER=1 WASM_BINDGEN_TEST_TIMEOUT=300 cargo +nightly test --target wasm32-unknown-unknown --features js --release --tests -p aggligator
+```sh
+WASM_BINDGEN_USE_BROWSER=1 WASM_BINDGEN_TEST_TIMEOUT=300 \
+    cargo +nightly test --target wasm32-unknown-unknown \
+    --features js --release --tests -p aggligator
 ```
 
 A proper web-compatible runtime environment is required. Thus Node.js will not work. Deno should

@@ -55,6 +55,9 @@ Aggregated links speed test client
 
    Must be enabled on both ends. Not supported by WebSocket, USB and Bluetooth links. The speed test data is random and thus not compressible.
 * `--tcp <TCP>` — TCP server name or IP addresses and port number
+* `--tcp-links <TCP_LINKS>` — Number of parallel TCP links per path
+
+  Default value: `1`
 * `--tcp-link-filter <TCP_LINK_FILTER>` — TCP link filter.
 
    none: no link filtering.
@@ -93,13 +96,19 @@ Aggregated links speed test client
 
 * `--socks <SOCKS>` — SOCKS5 proxy server names or IP addresses, optionally with port numbers.
 
-   One link is established through each proxy. The default proxy port number is 1080.
+   One link is established through each proxy by default. The default proxy port number is 1080.
+* `--socks-links <SOCKS_LINKS>` — Number of parallel links per SOCKS5 proxy
+
+  Default value: `1`
 * `--socks-target <SOCKS_TARGET>` — Target server name or IP address reached through the SOCKS5 proxies.
 
    Defaults to the first TCP target.
 * `--websocket <WEBSOCKET>` — WebSocket hosts or URLs.
 
    Default server port number is 8080 and path is /agg-speed.
+* `--websocket-links <WEBSOCKET_LINKS>` — Number of parallel WebSocket links per path
+
+  Default value: `1`
 
 
 

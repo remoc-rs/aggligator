@@ -5,6 +5,14 @@ All notable changes to aggligator utilities will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.21.4 - 2026-10-17
+### Added
+- `--tcp-links`, `--socks-links` and `--websocket-links` options for establishing
+  multiple parallel links per path or proxy
+### Changed
+- update aggligator-transport-tcp to 0.6.2, aggligator-transport-socks to 0.3.1 and
+  aggligator-transport-websocket to 0.10.2
+
 ## 0.21.3 - 2026-10-16
 ### Added
 - QUIC transport (#19)

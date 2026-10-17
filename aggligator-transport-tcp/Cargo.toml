@@ -1,6 +1,6 @@
 [package]
 name = "aggligator-transport-tcp"
-version = "0.6.1"
+version = "0.6.2"
 description = "Aggligator transport: TCP"
 categories = ["asynchronous", "network-programming"]
 keywords = ["aggligator", "aggligator-transport"]

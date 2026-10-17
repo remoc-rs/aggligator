@@ -5,6 +5,11 @@ All notable changes to the Aggligator WebSocket transport for the web will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.7.1 - 2026-10-17
+### Added
+- `WebSocketConnector::set_links_per_path` for establishing multiple parallel
+  WebSocket links per URL
+
 ## 0.7.0 - 2026-08-13
 ### Changed
 - the configuration function passed to `WebSocketConnector::set_cfg` needs to be

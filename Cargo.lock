@@ -74,7 +74,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-transport-socks"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "aggligator",
  "async-trait",
@@ -85,7 +85,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-transport-tcp"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "aggligator",
  "aggligator-wrapper-tls",
@@ -114,7 +114,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-transport-websocket"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "aggligator",
  "aggligator-transport-tcp",
@@ -132,7 +132,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-util"
-version = "0.21.3"
+version = "0.21.4"
 dependencies = [
  "aggligator",
  "aggligator-monitor",

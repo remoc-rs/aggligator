@@ -55,6 +55,9 @@ Tunnel client
    If unspecified only loopback connections are accepted.
 * `--once` — Exit after handling one connection
 * `--tcp <TCP>` — TCP server name or IP addresses and port number
+* `--tcp-links <TCP_LINKS>` — Number of parallel TCP links per path
+
+  Default value: `1`
 * `--tcp-link-filter <TCP_LINK_FILTER>` — TCP link filter.
 
    none: no link filtering.
@@ -96,7 +99,10 @@ Tunnel client
 
 * `--socks <SOCKS>` — SOCKS5 proxy server names or IP addresses, optionally with port numbers.
 
-   One link is established through each proxy. The default proxy port number is 1080.
+   One link is established through each proxy by default. The default proxy port number is 1080.
+* `--socks-links <SOCKS_LINKS>` — Number of parallel links per SOCKS5 proxy
+
+  Default value: `1`
 * `--socks-target <SOCKS_TARGET>` — Target server name or IP address reached through the SOCKS5 proxies.
 
    Defaults to the first TCP target.

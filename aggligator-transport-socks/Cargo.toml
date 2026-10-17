@@ -1,6 +1,6 @@
 [package]
 name = "aggligator-transport-socks"
-version = "0.3.0"
+version = "0.3.1"
 description = "Aggligator transport: SOCKS5"
 categories = ["asynchronous", "network-programming"]
 keywords = ["aggligator", "aggligator-transport", "socks", "proxy"]

@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "aggligator-transport-websocket-web"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "aggligator",
  "async-trait",

@@ -5,6 +5,11 @@ All notable changes to the Aggligator TCP transport will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.6.2 - 2026-10-17
+### Added
+- `TcpConnector::set_links_per_path` and `TcpLinkTag::with_link_num` for establishing
+  multiple parallel TCP links per network path
+
 ## 0.6.1 - 2026-10-16
 ### Changed
 - limit unsent data in the socket send buffer (`TCP_NOTSENT_LOWAT`) to 128 KiB by default,

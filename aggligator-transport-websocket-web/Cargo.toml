@@ -1,6 +1,6 @@
 [package]
 name = "aggligator-transport-websocket-web"
-version = "0.7.0"
+version = "0.7.1"
 description = "Aggligator transport: WebSocket for the web targeting WebAssembly"
 categories = ["asynchronous", "web-programming::websocket", "wasm"]
 keywords = ["aggligator", "aggligator-transport", "websocket"]

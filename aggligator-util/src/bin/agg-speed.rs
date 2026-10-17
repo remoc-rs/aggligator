@@ -199,6 +199,9 @@ pub struct ClientCli {
     /// TCP server name or IP addresses and port number.
     #[arg(long)]
     tcp: Vec<String>,
+    /// Number of parallel TCP links per path.
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u16).range(1..))]
+    tcp_links: u16,
     /// TCP link filter.
     ///
     /// none: no link filtering.
@@ -234,10 +237,13 @@ pub struct ClientCli {
     quic_congestion: QuicCongestion,
     /// SOCKS5 proxy server names or IP addresses, optionally with port numbers.
     ///
-    /// One link is established through each proxy.
+    /// One link is established through each proxy by default.
     /// The default proxy port number is 1080.
     #[arg(long)]
     socks: Vec<String>,
+    /// Number of parallel links per SOCKS5 proxy.
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u16).range(1..))]
+    socks_links: u16,
     /// Target server name or IP address reached through the SOCKS5 proxies.
     ///
     /// Defaults to the first TCP target.
@@ -248,6 +254,9 @@ pub struct ClientCli {
     /// Default server port number is 8080 and path is /agg-speed.
     #[arg(long)]
     websocket: Vec<String>,
+    /// Number of parallel WebSocket links per path.
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u16).range(1..))]
+    websocket_links: u16,
     /// Bluetooth RFCOMM server address.
     #[cfg(feature = "bluer")]
     #[arg(long, value_parser=parse_rfcomm)]
@@ -308,6 +317,7 @@ impl ClientCli {
                 TcpConnector::new(self.tcp.clone(), TCP_PORT).await.context("cannot resolve TCP target")?;
             tcp_connector.set_ip_version(ip_version);
             tcp_connector.set_link_filter(self.tcp_link_filter);
+            tcp_connector.set_links_per_path(self.tcp_links.into());
             tcp_connector.set_congestion_control(self.tcp_congestion.clone());
             targets.push(tcp_connector.to_string());
             connector.add(tcp_connector);
@@ -332,8 +342,9 @@ impl ClientCli {
                 .or_else(|| self.tcp.first().cloned())
                 .context("specify the target reached through the SOCKS5 proxies using --socks-target")?;
             let target = Socks5Target::parse(&target, TCP_PORT).context("invalid SOCKS5 target")?;
-            let socks_connector =
+            let mut socks_connector =
                 Socks5Connector::new(self.socks.clone(), target).context("cannot use SOCKS5 proxies")?;
+            socks_connector.set_links_per_path(self.socks_links.into());
             targets.push(socks_connector.to_string());
             connector.add(socks_connector);
         }
@@ -389,6 +400,7 @@ impl ClientCli {
             let mut ws_connector =
                 WebSocketConnector::new(websockets).await.context("cannot resolve WebSocket target")?;
             ws_connector.set_ip_version(ip_version);
+            ws_connector.set_links_per_path(self.websocket_links.into());
             ws_connector.set_congestion_control(self.tcp_congestion.clone());
             targets.push(ws_connector.to_string());
             connector.add(ws_connector);

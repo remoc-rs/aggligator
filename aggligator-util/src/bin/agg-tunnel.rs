@@ -164,6 +164,9 @@ pub struct ClientCli {
     /// TCP server name or IP addresses and port number.
     #[arg(long)]
     tcp: Vec<String>,
+    /// Number of parallel TCP links per path.
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u16).range(1..))]
+    tcp_links: u16,
     /// TCP link filter.
     ///
     /// none: no link filtering.
@@ -206,10 +209,13 @@ pub struct ClientCli {
     quic_congestion: QuicCongestion,
     /// SOCKS5 proxy server names or IP addresses, optionally with port numbers.
     ///
-    /// One link is established through each proxy.
+    /// One link is established through each proxy by default.
     /// The default proxy port number is 1080.
     #[arg(long)]
     socks: Vec<String>,
+    /// Number of parallel links per SOCKS5 proxy.
+    #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u16).range(1..))]
+    socks_links: u16,
     /// Target server name or IP address reached through the SOCKS5 proxies.
     ///
     /// Defaults to the first TCP target.
@@ -252,6 +258,7 @@ impl ClientCli {
                 Ok(mut tcp) => {
                     tcp.set_ip_version(IpVersion::from_only(self.ipv4, self.ipv6)?);
                     tcp.set_link_filter(self.tcp_link_filter);
+                    tcp.set_links_per_path(self.tcp_links.into());
                     tcp.set_congestion_control(self.tcp_congestion.clone());
                     targets.push(tcp.to_string());
                     watch_conn.push(Box::new(tcp.clone()));
@@ -300,7 +307,8 @@ impl ClientCli {
                 .context("specify the target reached through the SOCKS5 proxies using --socks-target")?;
             let target = Socks5Target::parse(&target, TCP_PORT).context("invalid SOCKS5 target")?;
             match Socks5Connector::new(self.socks.clone(), target) {
-                Ok(socks) => {
+                Ok(mut socks) => {
+                    socks.set_links_per_path(self.socks_links.into());
                     targets.push(socks.to_string());
                     watch_conn.push(Box::new(socks.clone()));
                     Some(socks)

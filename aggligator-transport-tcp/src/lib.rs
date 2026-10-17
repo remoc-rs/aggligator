@@ -132,6 +132,8 @@ pub struct TcpLinkTag {
     pub remote: SocketAddr,
     /// Link direction.
     pub direction: Direction,
+    /// Link number.
+    pub link_num: usize,
 }
 
 impl fmt::Display for TcpLinkTag {
@@ -140,14 +142,20 @@ impl fmt::Display for TcpLinkTag {
             Direction::Incoming => "<-",
             Direction::Outgoing => "->",
         };
-        write!(f, "{:16} {dir} {}", self.local, self.remote)
+        let num = if self.link_num == 0 { String::new() } else { format!(" (#{})", self.link_num) };
+        write!(f, "{:16} {dir} {}{num}", self.local, self.remote)
     }
 }
 
 impl TcpLinkTag {
     /// Creates a new link tag for a TCP link.
     pub fn new(local: Local, remote: SocketAddr, direction: Direction) -> Self {
-        Self { local, remote, direction }
+        Self { local, remote, direction, link_num: 0 }
+    }
+
+    /// Creates a new link tag for a TCP link with a link number.
+    pub fn with_link_num(local: Local, remote: SocketAddr, direction: Direction, link_num: usize) -> Self {
+        Self { local, remote, direction, link_num }
     }
 }
 
@@ -215,6 +223,7 @@ pub struct TcpConnector {
     ip_version: IpVersion,
     resolve_interval: Duration,
     link_filter: TcpLinkFilter,
+    links_per_path: usize,
     multi_interface: bool,
     interface_filter: Arc<dyn Fn(&NetworkInterface) -> bool + Send + Sync>,
     socket_setup: SocketSetupFn,
@@ -231,6 +240,7 @@ impl fmt::Debug for TcpConnector {
             .field("ip_version", &self.ip_version)
             .field("resolve_interval", &self.resolve_interval)
             .field("link_filter", &self.link_filter)
+            .field("links_per_path", &self.links_per_path)
             .field("multi_interface", &self.multi_interface)
             .field("notsent_lowat", &self.notsent_lowat)
             .field("congestion_control", &self.congestion_control)
@@ -295,6 +305,7 @@ impl TcpConnector {
             ip_version: IpVersion::Both,
             resolve_interval: Duration::from_secs(10),
             link_filter: TcpLinkFilter::default(),
+            links_per_path: 1,
             multi_interface: !cfg!(target_os = "android"),
             interface_filter: Arc::new(|_| true),
             socket_setup: Arc::new(|_, _| Ok(())),
@@ -318,6 +329,19 @@ impl TcpConnector {
     /// Sets the link filter method.
     pub fn set_link_filter(&mut self, link_filter: TcpLinkFilter) {
         self.link_filter = link_filter;
+    }
+
+    /// Sets the number of parallel TCP links to establish per path.
+    ///
+    /// By default one link (`1`) is established for each path. Increasing this opens
+    /// multiple parallel TCP connections over the same path, which can increase throughput
+    /// when network equipment or an ISP throttles bandwidth per TCP flow.
+    ///
+    /// # Panics
+    /// Panics if `links_per_path` is 0.
+    pub fn set_links_per_path(&mut self, links_per_path: usize) {
+        assert!(links_per_path >= 1, "links_per_path must be at least 1");
+        self.links_per_path = links_per_path;
     }
 
     /// Sets whether all available local interfaces should be used for connecting.
@@ -431,17 +455,29 @@ impl ConnectingTransport for TcpConnector {
 
             let mut tags: HashSet<LinkTagBox> = HashSet::new();
             for addr in &addrs {
-                match &interfaces {
-                    Some(interfaces) => {
-                        for iface in util::interface_names_for_target(interfaces, addr.ip()) {
-                            let tag = TcpLinkTag::new(Local::Interface(iface), *addr, Direction::Outgoing);
-                            tags.insert(Box::new(tag));
+                for link_num in 0..self.links_per_path {
+                    match &interfaces {
+                        Some(interfaces) => {
+                            for iface in util::interface_names_for_target(interfaces, addr.ip()) {
+                                let tag = TcpLinkTag::with_link_num(
+                                    Local::Interface(iface),
+                                    *addr,
+                                    Direction::Outgoing,
+                                    link_num,
+                                );
+                                tags.insert(Box::new(tag));
+                            }
                         }
-                    }
-                    None => {
-                        if let Ok(src) = util::local_address_for_target(*addr) {
-                            let tag = TcpLinkTag::new(Local::Address(src), *addr, Direction::Outgoing);
-                            tags.insert(Box::new(tag));
+                        None => {
+                            if let Ok(src) = util::local_address_for_target(*addr) {
+                                let tag = TcpLinkTag::with_link_num(
+                                    Local::Address(src),
+                                    *addr,
+                                    Direction::Outgoing,
+                                    link_num,
+                                );
+                                tags.insert(Box::new(tag));
+                            }
                         }
                     }
                 }
@@ -517,10 +553,14 @@ impl ConnectingTransport for TcpConnector {
             match self.link_filter {
                 TcpLinkFilter::None => false,
                 TcpLinkFilter::InterfaceInterface => {
-                    tag.local == new_tag.local && link.remote_user_data() == new.remote_user_data()
+                    tag.local == new_tag.local
+                        && link.remote_user_data() == new.remote_user_data()
+                        && tag.link_num == new_tag.link_num
                 }
                 TcpLinkFilter::InterfaceIp => {
-                    tag.local == new_tag.local && tag.remote.ip() == new_tag.remote.ip()
+                    tag.local == new_tag.local
+                        && tag.remote.ip() == new_tag.remote.ip()
+                        && tag.link_num == new_tag.link_num
                 }
             }
         }) {
@@ -751,3 +791,6 @@ impl AcceptingTransport for TcpAcceptor {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -90,18 +90,26 @@ pub struct Socks5LinkTag {
     pub proxy: SocketAddr,
     /// Target address reached through the proxy.
     pub target: Socks5Target,
+    /// Link number.
+    pub link_num: usize,
 }
 
 impl Socks5LinkTag {
     /// Creates a link tag for a SOCKS5 proxy and target.
     pub fn new(proxy: SocketAddr, target: Socks5Target) -> Self {
-        Self { proxy, target }
+        Self { proxy, target, link_num: 0 }
+    }
+
+    /// Creates a link tag for a SOCKS5 proxy and target with a link number.
+    pub fn with_link_num(proxy: SocketAddr, target: Socks5Target, link_num: usize) -> Self {
+        Self { proxy, target, link_num }
     }
 }
 
 impl fmt::Display for Socks5LinkTag {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} -> {}", self.proxy, self.target)
+        let num = if self.link_num == 0 { String::new() } else { format!(" (#{})", self.link_num) };
+        write!(f, "{} -> {}{num}", self.proxy, self.target)
     }
 }
 
@@ -155,12 +163,13 @@ fn with_default_port(addr: &str, default_port: u16) -> String {
 
 /// SOCKS5 transport for outgoing connections.
 ///
-/// This transport establishes one IO-stream-based link through each configured proxy.
+/// This transport establishes IO-stream-based links through each configured proxy.
 #[derive(Debug, Clone)]
 pub struct Socks5Connector {
     proxies: Vec<String>,
     target: Socks5Target,
     resolve_interval: Duration,
+    links_per_path: usize,
 }
 
 impl fmt::Display for Socks5Connector {
@@ -178,8 +187,8 @@ impl Socks5Connector {
     ///
     /// `proxies` can contain IP addresses and hostnames, including port numbers.
     /// If an entry does not specify a port number, [`DEFAULT_PROXY_PORT`] is used.
-    /// Proxy hostnames are resolved locally and one link is established for each
-    /// resolved IP address. Resolution is retried periodically, thus DNS updates
+    /// Proxy hostnames are resolved locally and by default one link is established
+    /// for each resolved IP address. Resolution is retried periodically, thus DNS updates
     /// will be taken into account without the need to recreate this transport.
     ///
     /// `target` is the address the proxies should connect to. A target hostname is
@@ -188,8 +197,9 @@ impl Socks5Connector {
     ///
     /// It is *not* checked at creation that the proxies can be resolved.
     ///
-    /// Only a single link per proxy IP address is being used, even when the local and/or
-    /// remote endpoints provide more than one network interface.
+    /// By default a single link per proxy IP address is used; call
+    /// [`set_links_per_path`](Self::set_links_per_path) to establish multiple parallel
+    /// links through each proxy.
     pub fn new<'a>(
         proxies: impl IntoIterator<Item = impl AsRef<str>>, target: impl IntoTargetAddr<'a>,
     ) -> Result<Self> {
@@ -201,12 +211,23 @@ impl Socks5Connector {
 
         let target = target.into_target_addr().map_err(|err| Error::new(ErrorKind::InvalidInput, err))?.into();
 
-        Ok(Self { proxies, target, resolve_interval: Duration::from_secs(10) })
+        Ok(Self { proxies, target, resolve_interval: Duration::from_secs(10), links_per_path: 1 })
     }
 
     /// Sets the interval for re-resolving the proxy hostnames.
     pub fn set_resolve_interval(&mut self, resolve_interval: Duration) {
         self.resolve_interval = resolve_interval;
+    }
+
+    /// Sets the number of parallel links to establish through each proxy.
+    ///
+    /// By default one link (`1`) is established per proxy IP address.
+    ///
+    /// # Panics
+    /// Panics if `links_per_path` is 0.
+    pub fn set_links_per_path(&mut self, links_per_path: usize) {
+        assert!(links_per_path >= 1, "links_per_path must be at least 1");
+        self.links_per_path = links_per_path;
     }
 
     /// Resolves the proxies to socket addresses.
@@ -234,12 +255,13 @@ impl ConnectingTransport for Socks5Connector {
 
     async fn link_tags(&self, tx: watch::Sender<HashSet<LinkTagBox>>) -> Result<()> {
         loop {
-            let tags = self
-                .resolve()
-                .await
-                .into_iter()
-                .map(|proxy| Box::new(Socks5LinkTag::new(proxy, self.target.clone())) as LinkTagBox)
-                .collect();
+            let mut tags = HashSet::new();
+            for proxy in self.resolve().await {
+                for link_num in 0..self.links_per_path {
+                    tags.insert(Box::new(Socks5LinkTag::with_link_num(proxy, self.target.clone(), link_num))
+                        as LinkTagBox);
+                }
+            }
             tx.send_replace(tags);
 
             sleep(self.resolve_interval).await;

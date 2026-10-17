@@ -42,24 +42,32 @@ fn parses_target() {
 }
 
 #[tokio::test]
-async fn publishes_one_link_for_each_proxy() {
+async fn publishes_links_for_each_proxy() {
     let proxies = [SocketAddr::from(([127, 0, 0, 1], 1080)), SocketAddr::from(([127, 0, 0, 2], 1080))];
-    let connector =
-        Socks5Connector::new(proxies.map(|proxy| proxy.to_string()), ("target.example", 4242)).unwrap();
-    let (tx, mut rx) = watch::channel(HashSet::new());
-    let task = tokio::spawn(async move { connector.link_tags(tx).await });
+    for links_per_path in [1, 3] {
+        let mut connector =
+            Socks5Connector::new(proxies.map(|proxy| proxy.to_string()), ("target.example", 4242)).unwrap();
+        connector.set_links_per_path(links_per_path);
+        let (tx, mut rx) = watch::channel(HashSet::new());
+        let task = tokio::spawn(async move { connector.link_tags(tx).await });
 
-    rx.changed().await.unwrap();
-    let tags = rx.borrow().clone();
-    assert_eq!(tags.len(), proxies.len());
-    for proxy in proxies {
-        assert!(tags.contains(
-            &(Box::new(Socks5LinkTag::new(proxy, Socks5Target::Domain("target.example".into(), 4242),))
-                as LinkTagBox)
-        ));
+        rx.changed().await.unwrap();
+        let tags = rx.borrow().clone();
+        assert_eq!(tags.len(), proxies.len() * links_per_path);
+        for proxy in proxies {
+            for link_num in 0..links_per_path {
+                assert!(tags.contains(
+                    &(Box::new(Socks5LinkTag::with_link_num(
+                        proxy,
+                        Socks5Target::Domain("target.example".into(), 4242),
+                        link_num,
+                    )) as LinkTagBox)
+                ));
+            }
+        }
+
+        task.abort();
     }
-
-    task.abort();
 }
 
 #[tokio::test]

@@ -61,11 +61,14 @@ pub struct OutgoingWebSocketLinkTag {
     pub url: String,
     /// Whether to use TLS for connecting.
     pub tls: bool,
+    /// Link number.
+    pub link_num: usize,
 }
 
 impl fmt::Display for OutgoingWebSocketLinkTag {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} -> {} ({})", self.local, self.remote, self.url)
+        let num = if self.link_num == 0 { String::new() } else { format!(" (#{})", self.link_num) };
+        write!(f, "{} -> {} ({}){num}", self.local, self.remote, self.url)
     }
 }
 
@@ -121,6 +124,7 @@ pub struct WebSocketConnector {
     resolve_interval: Duration,
     connector: Option<Connector>,
     web_socket_config: Option<WebSocketConfig>,
+    links_per_path: usize,
     multi_interface: bool,
     interface_filter: Arc<dyn Fn(&NetworkInterface) -> bool + Send + Sync>,
     socket_setup: SocketSetupFn,
@@ -137,6 +141,7 @@ impl fmt::Debug for WebSocketConnector {
             .field("ip_version", &self.ip_version)
             .field("resolve_interval", &self.resolve_interval)
             .field("web_socket_config", &self.web_socket_config)
+            .field("links_per_path", &self.links_per_path)
             .field("multi_interface", &self.multi_interface)
             .field("notsent_lowat", &self.notsent_lowat)
             .field("congestion_control", &self.congestion_control)
@@ -203,6 +208,7 @@ impl WebSocketConnector {
             resolve_interval: Duration::from_secs(10),
             connector: None,
             web_socket_config: None,
+            links_per_path: 1,
             multi_interface: !cfg!(target_os = "android"),
             interface_filter: Arc::new(|_| true),
             socket_setup: Arc::new(|_, _| Ok(())),
@@ -221,6 +227,17 @@ impl WebSocketConnector {
     /// Sets the interval for re-resolving the hostname and checking for changed network interfaces.
     pub fn set_resolve_interval(&mut self, resolve_interval: Duration) {
         self.resolve_interval = resolve_interval;
+    }
+
+    /// Sets the number of parallel WebSocket links to establish per path.
+    ///
+    /// By default one link (`1`) is established for each path.
+    ///
+    /// # Panics
+    /// Panics if `links_per_path` is 0.
+    pub fn set_links_per_path(&mut self, links_per_path: usize) {
+        assert!(links_per_path >= 1, "links_per_path must be at least 1");
+        self.links_per_path = links_per_path;
     }
 
     /// Sets the WebSocket connector for establishing the connection.
@@ -360,27 +377,31 @@ impl ConnectingTransport for WebSocketConnector {
             let mut tags: HashSet<LinkTagBox> = HashSet::new();
             for (url, addrs) in &url_addrs {
                 for addr in addrs {
-                    match &interfaces {
-                        Some(interfaces) => {
-                            for interface in util::interface_names_for_target(interfaces, addr.ip()) {
-                                let tag = OutgoingWebSocketLinkTag {
-                                    local: Local::Interface(interface),
-                                    remote: *addr,
-                                    url: url.to_string(),
-                                    tls: url.scheme() == "wss",
-                                };
-                                tags.insert(Box::new(tag));
+                    for link_num in 0..self.links_per_path {
+                        match &interfaces {
+                            Some(interfaces) => {
+                                for interface in util::interface_names_for_target(interfaces, addr.ip()) {
+                                    let tag = OutgoingWebSocketLinkTag {
+                                        local: Local::Interface(interface),
+                                        remote: *addr,
+                                        url: url.to_string(),
+                                        tls: url.scheme() == "wss",
+                                        link_num,
+                                    };
+                                    tags.insert(Box::new(tag));
+                                }
                             }
-                        }
-                        None => {
-                            if let Ok(src) = util::local_address_for_target(*addr) {
-                                let tag = OutgoingWebSocketLinkTag {
-                                    local: Local::Address(src),
-                                    remote: *addr,
-                                    url: url.to_string(),
-                                    tls: url.scheme() == "wss",
-                                };
-                                tags.insert(Box::new(tag));
+                            None => {
+                                if let Ok(src) = util::local_address_for_target(*addr) {
+                                    let tag = OutgoingWebSocketLinkTag {
+                                        local: Local::Address(src),
+                                        remote: *addr,
+                                        url: url.to_string(),
+                                        tls: url.scheme() == "wss",
+                                        link_num,
+                                    };
+                                    tags.insert(Box::new(tag));
+                                }
                             }
                         }
                     }
@@ -481,7 +502,9 @@ impl ConnectingTransport for WebSocketConnector {
 
         match existing.iter().find(|link| {
             let Some(tag) = link.tag().as_any().downcast_ref::<OutgoingWebSocketLinkTag>() else { return false };
-            tag.local == new_tag.local && link.remote_user_data() == new.remote_user_data()
+            tag.local == new_tag.local
+                && link.remote_user_data() == new.remote_user_data()
+                && tag.link_num == new_tag.link_num
         }) {
             Some(other) => {
                 let other_tag = other.tag().as_any().downcast_ref::<OutgoingWebSocketLinkTag>().unwrap();
@@ -718,3 +741,6 @@ impl AcceptingTransport for WebSocketAcceptor {
         Err(Error::new(ErrorKind::ConnectionReset, "router was dropped"))
     }
 }
+
+#[cfg(test)]
+mod tests;

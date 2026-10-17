@@ -32,7 +32,7 @@ socket2 = { version = "0.6.0", features = ["all"] }
 libc = "0.2"
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["io-util", "macros", "rt-multi-thread", "time"] }
 
 [package.metadata.docs.rs]
 all-features = true

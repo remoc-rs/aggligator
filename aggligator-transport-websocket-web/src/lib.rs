@@ -45,11 +45,14 @@ static NAME: &str = "websocket";
 pub struct OutgoingWebSocketLinkTag {
     /// Remote URL.
     pub url: String,
+    /// Link number.
+    pub link_num: usize,
 }
 
 impl fmt::Display for OutgoingWebSocketLinkTag {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.url)
+        let num = if self.link_num == 0 { String::new() } else { format!(" (#{})", self.link_num) };
+        write!(f, "{}{num}", self.url)
     }
 }
 
@@ -95,12 +98,16 @@ impl LinkTag for OutgoingWebSocketLinkTag {
 #[derive(Clone)]
 pub struct WebSocketConnector {
     urls: Vec<String>,
+    links_per_path: usize,
     cfg_fn: Arc<dyn Fn(&mut WebSocketBuilder) + Send + Sync + 'static>,
 }
 
 impl fmt::Debug for WebSocketConnector {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("WebSocketConnector").field("urls", &self.urls).finish()
+        f.debug_struct("WebSocketConnector")
+            .field("urls", &self.urls)
+            .field("links_per_path", &self.links_per_path)
+            .finish()
     }
 }
 
@@ -124,7 +131,18 @@ impl WebSocketConnector {
             return Err(Error::new(ErrorKind::InvalidInput, "at least one URL is required"));
         }
 
-        Ok(Self { urls, cfg_fn: Arc::new(|_| ()) })
+        Ok(Self { urls, links_per_path: 1, cfg_fn: Arc::new(|_| ()) })
+    }
+
+    /// Sets the number of parallel WebSocket links to establish per URL.
+    ///
+    /// By default one link (`1`) is established per URL.
+    ///
+    /// # Panics
+    /// Panics if `links_per_path` is 0.
+    pub fn set_links_per_path(&mut self, links_per_path: usize) {
+        assert!(links_per_path >= 1, "links_per_path must be at least 1");
+        self.links_per_path = links_per_path;
     }
 
     /// Sets the configuration function that is applied to each
@@ -143,7 +161,9 @@ impl ConnectingTransport for WebSocketConnector {
     async fn link_tags(&self, tx: watch::Sender<HashSet<LinkTagBox>>) -> Result<()> {
         let mut tags: HashSet<LinkTagBox> = HashSet::new();
         for url in &self.urls {
-            tags.insert(Box::new(OutgoingWebSocketLinkTag { url: url.clone() }));
+            for link_num in 0..self.links_per_path {
+                tags.insert(Box::new(OutgoingWebSocketLinkTag { url: url.clone(), link_num }));
+            }
         }
 
         tx.send_replace(tags);

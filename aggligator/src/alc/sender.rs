@@ -1,9 +1,10 @@
 //! Sender front-end of aggregated stream.
 
-use bytes::Bytes;
+use bytes::{BufMut, Bytes, BytesMut};
 use futures::{FutureExt, Sink, SinkExt, ready};
 use std::{
-    fmt, io,
+    fmt,
+    io::{self, IoSlice},
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -287,6 +288,32 @@ impl AsyncWrite for SenderSink {
         this.start_send_unpin(data)?;
 
         Poll::Ready(Ok(len))
+    }
+
+    fn poll_write_vectored(
+        self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice],
+    ) -> Poll<Result<usize, io::Error>> {
+        let this = Pin::into_inner(self);
+
+        ready!(this.poll_ready_unpin(cx))?;
+
+        let max_packet_size = this.cfg.io_write_size.get().min(this.remote_cfg.recv_buffer.get() as usize);
+        let len = bufs.iter().map(|buf| buf.len()).sum::<usize>().min(max_packet_size);
+        let mut data = BytesMut::with_capacity(len);
+        for buf in bufs {
+            let n = buf.len().min(len - data.len());
+            data.put_slice(&buf[..n]);
+            if data.len() == len {
+                break;
+            }
+        }
+        this.start_send_unpin(data.freeze())?;
+
+        Poll::Ready(Ok(len))
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        true
     }
 
     #[inline]

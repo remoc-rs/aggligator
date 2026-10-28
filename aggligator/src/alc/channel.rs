@@ -2,7 +2,7 @@
 
 use bytes::Bytes;
 use std::{
-    io,
+    io::{self, IoSlice},
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -115,6 +115,17 @@ impl AsyncWrite for Stream {
     #[inline]
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize, io::Error>> {
         Pin::new(&mut self.get_mut().tx).poll_write(cx, buf)
+    }
+
+    #[inline]
+    fn poll_write_vectored(
+        self: Pin<&mut Self>, cx: &mut Context, bufs: &[IoSlice],
+    ) -> Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.get_mut().tx).poll_write_vectored(cx, bufs)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.tx.is_write_vectored()
     }
 
     #[inline]

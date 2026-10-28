@@ -33,7 +33,7 @@ futures = { workspace = true }
 rand = { workspace = true }
 tokio = { workspace = true, features = ["rt", "time", "macros"] }
 tokio-stream = { workspace = true, features = ["sync"] }
-tokio-util = { workspace = true, features = ["codec"] }
+tokio-util = { workspace = true, features = ["codec", "io"] }
 tracing = { workspace = true }
 wokio = { workspace = true }
 x25519-dalek = { workspace = true, features = ["static_secrets"] }
@@ -61,7 +61,7 @@ crc-fast = { workspace = true }
 
 [dev-dependencies]
 crc-fast = { workspace = true }
-tokio = { workspace = true, features = ["rt"] }
+tokio = { workspace = true, features = ["rt", "io-util"] }
 test-log = { workspace = true, default-features = false, features = ["trace"] }
 tracing-subscriber = { workspace = true, default-features = false, features = [
     "env-filter",

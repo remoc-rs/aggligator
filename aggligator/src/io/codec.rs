@@ -65,14 +65,31 @@ enum DecodeState {
     Data(Header),
 }
 
+/// Header of a packet.
 #[derive(Debug, Clone, Copy)]
-struct Header {
+pub(crate) struct Header {
     length: u32,
     checksum: u32,
 }
 
+impl Header {
+    /// Length of the packet data.
+    pub(crate) fn len(&self) -> usize {
+        self.length as usize
+    }
+
+    /// Verifies the packet data against the checksum.
+    pub(crate) fn verify(&self, data: &[u8]) -> io::Result<()> {
+        if self.checksum != checksum(data) {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, IntegrityError::DataCorrupted));
+        }
+        Ok(())
+    }
+}
+
 impl IntegrityCodec {
-    const HEADER_LEN: usize = size_of::<u32>() + size_of::<u16>() + size_of::<u32>();
+    /// Length of a packet header.
+    pub(crate) const HEADER_LEN: usize = size_of::<u32>() + size_of::<u16>() + size_of::<u32>();
 
     /// Creates a new `IntegrityCodec` with the default configuration values.
     pub fn new() -> Self {
@@ -118,9 +135,27 @@ impl IntegrityCodec {
         buf.reserve(additional);
     }
 
-    fn decode_header(&mut self, src: &mut BytesMut) -> io::Result<Option<Header>> {
+    /// Appends the header of a packet containing `data` to `dst`.
+    pub(crate) fn encode_header(&mut self, data: &[u8], dst: &mut BytesMut) -> io::Result<()> {
+        if data.len() > self.max_frame_len as usize {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, IntegrityError::PacketTooBig));
+        }
+
+        dst.put_u32(data.len() as u32);
+
+        dst.put_u16(self.encode_seq);
+        self.encode_seq = self.encode_seq.wrapping_add(1);
+
+        dst.put_u32(checksum(data));
+
+        Ok(())
+    }
+
+    /// Decodes the packet header at the start of `src`, removing it.
+    ///
+    /// Returns `None` if `src` does not contain the complete header yet.
+    pub(crate) fn decode_header(&mut self, src: &mut BytesMut) -> io::Result<Option<Header>> {
         if src.len() < Self::HEADER_LEN {
-            self.reserve(src, Self::HEADER_LEN);
             return Ok(None);
         }
 
@@ -128,7 +163,6 @@ impl IntegrityCodec {
         if length > self.max_frame_len {
             return Err(io::Error::new(io::ErrorKind::InvalidData, IntegrityError::PacketTooBig));
         }
-        self.reserve(src, (length as usize + size_of::<u16>() + size_of::<u32>()).saturating_sub(src.len()));
 
         let seq = src.get_u16();
         if seq != self.decode_seq {
@@ -139,20 +173,6 @@ impl IntegrityCodec {
         let checksum = src.get_u32();
 
         Ok(Some(Header { length, checksum }))
-    }
-
-    fn decode_data(&self, header: Header, src: &mut BytesMut) -> io::Result<Option<BytesMut>> {
-        if src.len() < header.length as usize {
-            return Ok(None);
-        }
-
-        let data = src.split_to(header.length as usize);
-
-        if header.checksum != checksum(&data) {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, IntegrityError::DataCorrupted));
-        }
-
-        Ok(Some(data))
     }
 }
 
@@ -168,22 +188,28 @@ impl Decoder for IntegrityCodec {
         let header = match self.state {
             DecodeState::Header => match self.decode_header(src)? {
                 Some(header) => {
+                    self.reserve(src, header.len().saturating_sub(src.len()));
                     self.state = DecodeState::Data(header);
                     header
                 }
-                None => return Ok(None),
+                None => {
+                    self.reserve(src, Self::HEADER_LEN);
+                    return Ok(None);
+                }
             },
             DecodeState::Data(header) => header,
         };
 
-        match self.decode_data(header, src)? {
-            Some(data) => {
-                self.state = DecodeState::Header;
-                self.reserve(src, src.len().saturating_sub(Self::HEADER_LEN));
-                Ok(Some(data))
-            }
-            None => Ok(None),
+        if src.len() < header.len() {
+            return Ok(None);
         }
+
+        let data = src.split_to(header.len());
+        header.verify(&data)?;
+
+        self.state = DecodeState::Header;
+        self.reserve(src, src.len().saturating_sub(Self::HEADER_LEN));
+        Ok(Some(data))
     }
 }
 
@@ -191,21 +217,8 @@ impl Encoder<Bytes> for IntegrityCodec {
     type Error = io::Error;
 
     fn encode(&mut self, data: Bytes, dst: &mut BytesMut) -> io::Result<()> {
-        if data.len() > self.max_frame_len as usize {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, IntegrityError::PacketTooBig));
-        }
-
-        dst.reserve(Self::HEADER_LEN + data.len());
-
-        dst.put_u32(data.len() as u32);
-
-        dst.put_u16(self.encode_seq);
-        self.encode_seq = self.encode_seq.wrapping_add(1);
-
-        dst.put_u32(checksum(&data));
-
-        dst.extend_from_slice(&data[..]);
-
+        self.encode_header(&data, dst)?;
+        dst.extend_from_slice(&data);
         Ok(())
     }
 }

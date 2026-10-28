@@ -29,7 +29,6 @@ async-trait = { workspace = true }
 atomic_refcell = { workspace = true }
 byteorder = { workspace = true }
 bytes = { workspace = true }
-crc-fast = { workspace = true }
 futures = { workspace = true }
 rand = { workspace = true }
 tokio = { workspace = true, features = ["rt", "time", "macros"] }
@@ -54,7 +53,14 @@ web-sys = { workspace = true, features = [
 wasm-bindgen = { workspace = true, optional = true }
 wasm-bindgen-futures = { workspace = true, optional = true }
 
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+crc32fast = { workspace = true }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+crc-fast = { workspace = true }
+
 [dev-dependencies]
+crc-fast = { workspace = true }
 tokio = { workspace = true, features = ["rt"] }
 test-log = { workspace = true, default-features = false, features = ["trace"] }
 tracing-subscriber = { workspace = true, default-features = false, features = [

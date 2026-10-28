@@ -1,9 +1,23 @@
 //! Integrity codec.
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use crc_fast::crc32_iso_hdlc;
 use std::{fmt, io, mem::size_of};
 use tokio_util::codec::{Decoder, Encoder};
+
+/// CRC-32 (ISO-HDLC) checksum of the data.
+///
+/// crc-fast is faster on WebAssembly, while crc32fast is faster on other platforms.
+fn checksum(data: &[u8]) -> u32 {
+    #[cfg(target_family = "wasm")]
+    {
+        crc_fast::crc32_iso_hdlc(data)
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    {
+        crc32fast::hash(data)
+    }
+}
 
 /// A packet decoding error.
 #[derive(Debug, Clone)]
@@ -134,7 +148,7 @@ impl IntegrityCodec {
 
         let data = src.split_to(header.length as usize);
 
-        if header.checksum != crc32_iso_hdlc(&data) {
+        if header.checksum != checksum(&data) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, IntegrityError::DataCorrupted));
         }
 
@@ -188,7 +202,7 @@ impl Encoder<Bytes> for IntegrityCodec {
         dst.put_u16(self.encode_seq);
         self.encode_seq = self.encode_seq.wrapping_add(1);
 
-        dst.put_u32(crc32_iso_hdlc(&data));
+        dst.put_u32(checksum(&data));
 
         dst.extend_from_slice(&data[..]);
 

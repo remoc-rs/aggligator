@@ -30,6 +30,7 @@ atomic_refcell = "0.1.8"
 byteorder = "1.4"
 bytes = "1.11"
 crc-fast = { version = "1", default-features = false, features = ["std"] }
+crc32fast = "1.5"
 crossterm = "0.29"
 futures = "0.3"
 getrandom = "0.4"

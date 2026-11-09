@@ -139,6 +139,7 @@ pub struct ClientCli {
     no_monitor: bool,
     /// Compress all links using zstd with the specified level (default 1).
     ///
+    /// The level is optional; --compress without a value uses level 1.
     /// Must be enabled on both ends. Not supported by WebSocket, USB and Bluetooth links.
     /// Compression only helps if the transferred data is compressible.
     #[arg(long, value_name = "LEVEL", num_args = 0..=1, default_missing_value = "1", allow_negative_numbers = true)]
@@ -222,6 +223,9 @@ pub struct ClientCli {
     #[arg(long)]
     socks_target: Option<String>,
     /// Bluetooth RFCOMM server address.
+    ///
+    /// Takes the form `[00:11:22:33:44:55]:7`, with a Bluetooth address and channel.
+    /// Quote the value in your shell to preserve the brackets.
     #[cfg(feature = "bluer")]
     #[arg(long)]
     rfcomm: Option<aggligator_transport_bluer::rfcomm::SocketAddr>,
@@ -560,15 +564,19 @@ pub struct ServerCli {
     no_monitor: bool,
     /// Compress all links using zstd with the specified level (default 1).
     ///
+    /// The level is optional; --compress without a value uses level 1.
     /// Must be enabled on both ends. Not supported by WebSocket, USB and Bluetooth links.
     /// Compression only helps if the transferred data is compressible.
     #[arg(long, value_name = "LEVEL", num_args = 0..=1, default_missing_value = "1", allow_negative_numbers = true)]
     compress: Option<i32>,
     /// Ports to forward to clients.
     ///
-    /// Takes the form `port` or `target:port` and can be specified multiple times.
+    /// Takes the form `port` for localhost or `host:target_port:server_port` for an
+    /// explicit target, and can be specified multiple times.
     ///
-    /// Target can be a host name or IP address. If unspecified localhost is used as target.
+    /// The final server_port is the identifier requested by the client, not a listening port.
+    /// For example, `db.internal:5432:5432` maps identifier 5432 to db.internal:5432.
+    /// Host can be a host name or IP address.
     #[arg(long, short = 'p', value_parser = parse_key_val::<String, u16>, required=true)]
     port: Vec<(String, u16)>,
     /// TCP port to listen on.

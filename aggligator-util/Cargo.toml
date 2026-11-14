@@ -9,7 +9,7 @@ edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
-homepage.workspace = true
+homepage = "https://remoc.rs/aggligator/tunnel.html"
 repository.workspace = true
 
 [features]
